@@ -29,6 +29,7 @@ export class MarketService {
       .map((o) => ({
         price: o.price.toString(),
         quantity: o.quantity.minus(o.filledQuantity).toString(),
+        filledQuantity: o.filledQuantity.toString(), // <-- Add this line
       }));
 
     const asks = orders
@@ -37,6 +38,7 @@ export class MarketService {
       .map((o) => ({
         price: o.price.toString(),
         quantity: o.quantity.minus(o.filledQuantity).toString(),
+        filledQuantity: o.filledQuantity.toString(), // <-- Add this line
       }));
 
     return { bids, asks };

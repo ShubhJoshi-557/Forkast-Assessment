@@ -30,14 +30,13 @@
 //   }
 // }
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { OnModuleInit } from '@nestjs/common';
-import { Trade } from '@prisma/client';
+import { Prisma, Trade } from '@prisma/client';
 import { Consumer, Kafka } from 'kafkajs';
+import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../websocket/events.gateway';
 
 export type Candle = {
-  time: number; // UNIX timestamp (seconds)
+  time: number;
   open: number;
   high: number;
   low: number;
@@ -46,7 +45,7 @@ export type Candle = {
 };
 
 @Injectable()
-export class ChartsService implements OnModuleInit {
+export class ChartsService {
   private readonly kafka: Kafka;
   private readonly consumer: Consumer;
   // In-memory store for the current, real-time candles for each trading pair.
@@ -84,7 +83,7 @@ export class ChartsService implements OnModuleInit {
     const tradeTime = new Date(trade.createdAt).getTime();
 
     // Get the timestamp for the start of the current minute.
-    const candleTime = Math.floor(tradeTime / 60000) * 60; // In seconds
+    const candleTime = Math.floor(tradeTime / 10000) * 10;
 
     const existingCandle = this.liveCandles.get(trade.tradingPair);
 
@@ -124,9 +123,14 @@ export class ChartsService implements OnModuleInit {
     interval: string,
     hours: number,
   ): Promise<Candle[]> {
-    const candles = await this.prisma.$queryRaw<any[]>`
+    // We get the unit (e.g., 'minute', 'hour') from the interval string.
+    // This is safe because the controller has already validated the full string.
+    const unit = interval.split(' ')[1];
+
+    const candles = await this.prisma.$queryRaw<any[]>(
+      Prisma.sql`
       SELECT DISTINCT
-        date_trunc('minute', "createdAt") AS candle_time,
+        date_trunc(${Prisma.raw(`'${unit}'`)}, "createdAt") AS candle_time,
         FIRST_VALUE(price) OVER w AS open,
         MAX(price) OVER w AS high,
         MIN(price) OVER w AS low,
@@ -135,15 +139,15 @@ export class ChartsService implements OnModuleInit {
       FROM "Trade"
       WHERE 
         "tradingPair" = ${tradingPair} AND
-        -- FINAL FIX: This is the simplest and most compatible way to subtract hours.
         "createdAt" >= NOW() - (${hours} * interval '1 hour')
       WINDOW w AS (
-        PARTITION BY date_trunc('minute', "createdAt")
+        PARTITION BY date_trunc(${Prisma.raw(`'${unit}'`)}, "createdAt")
         ORDER BY "createdAt" ASC
         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
       )
       ORDER BY candle_time ASC;
-    `;
+    `,
+    );
 
     return candles.map((c) => ({
       time: Math.floor(new Date(c.candle_time).getTime() / 1000),

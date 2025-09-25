@@ -60,7 +60,7 @@ function random(min, max) {
 }
 
 const API_BASE_URL = 'http://localhost:3001';
-const TRADING_PAIR = 'BTC-USD';
+const TRADING_PAIR = 'ETH-USD';
 const USER_ID = 1; // Assuming a single user for simplicity
 
 // --- Configuration for the load test ---
