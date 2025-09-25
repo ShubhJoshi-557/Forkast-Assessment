@@ -6,16 +6,19 @@ import { PrismaService } from '../prisma/prisma.service';
 export class MarketService {
   constructor(private prisma: PrismaService) {}
 
-  async getRecentTrades() {
+  async getRecentTrades(tradingPair: string) {
     return this.prisma.trade.findMany({
+      where: { tradingPair },
       orderBy: { createdAt: 'desc' },
-      take: 50, // Get the last 50 trades
+      take: 50,
     });
   }
 
-  async getOrderBook() {
+  // UPDATED: Added the tradingPair parameter to the method signature
+  async getOrderBook(tradingPair: string) {
     const orders = await this.prisma.order.findMany({
       where: {
+        tradingPair, // Now this correctly filters by the provided parameter
         status: { in: [OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED] },
       },
       orderBy: { price: 'desc' },
@@ -30,7 +33,7 @@ export class MarketService {
 
     const asks = orders
       .filter((o) => o.type === OrderType.SELL)
-      .sort((a, b) => a.price.comparedTo(b.price)) // Sort asks ascending
+      .sort((a, b) => a.price.comparedTo(b.price))
       .map((o) => ({
         price: o.price.toString(),
         quantity: o.quantity.minus(o.filledQuantity).toString(),

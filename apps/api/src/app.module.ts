@@ -5,11 +5,12 @@ import { AppService } from './app.service';
 import { validationSchema } from './config/validation.schema';
 import { KafkaModule } from './kafka/kafka.module';
 import { MarketModule } from './market/market.module';
-import { MatchingModule } from './matching/matching.module';
+import { MatchingEngineModule } from './matching/matching.engine.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { EventsModule } from './websocket/events.module';
+import { ChartsModule } from './charts/charts.module';
 
 @Module({
   imports: [
@@ -18,7 +19,8 @@ import { EventsModule } from './websocket/events.module';
     KafkaModule,
     OrdersModule,
     MarketModule,
-    MatchingModule,
+    MatchingEngineModule,
+    ChartsModule,
     EventsModule,
     RedisModule,
   ],

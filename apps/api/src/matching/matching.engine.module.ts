@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { KafkaModule } from '../kafka/kafka.module';
-import { OrdersController } from './orders.controller';
-import { OrdersService } from './orders.service';
+import { PrismaModule } from '../prisma/prisma.module';
+import { MatchingEngineService } from './matching.engine.service';
+import { RedisModule } from 'src/redis/redis.module';
 
 // 1. Validate the environment variable at the top of the file
 const kafkaBrokerUrl = process.env.KAFKA_BROKER_URL;
@@ -12,7 +13,9 @@ if (!kafkaBrokerUrl) {
 
 @Module({
   imports: [
+    PrismaModule,
     KafkaModule,
+    RedisModule,
     ClientsModule.register([
       {
         name: 'KAFKA_SERVICE',
@@ -26,7 +29,6 @@ if (!kafkaBrokerUrl) {
       },
     ]),
   ],
-  controllers: [OrdersController],
-  providers: [OrdersService],
+  providers: [MatchingEngineService],
 })
-export class OrdersModule {}
+export class MatchingEngineModule {}

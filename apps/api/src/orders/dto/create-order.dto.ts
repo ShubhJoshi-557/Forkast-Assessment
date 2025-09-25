@@ -1,10 +1,22 @@
 import { OrderType } from '@prisma/client';
-import { IsEnum, IsNotEmpty, IsNumber, IsPositive } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsPositive,
+  IsString,
+  IsUppercase,
+} from 'class-validator';
 
 export class CreateOrderDto {
   @IsNotEmpty()
+  @IsString()
+  @IsUppercase()
+  tradingPair: string; // e.g., "BTC-USD"
+
+  @IsNotEmpty()
   @IsEnum(OrderType)
-  type: OrderType; // 'BUY' or 'SELL'
+  type: OrderType;
 
   @IsNotEmpty()
   @IsNumber()
@@ -16,7 +28,6 @@ export class CreateOrderDto {
   @IsPositive()
   quantity: number;
 
-  // In a real system, you'd get this from an auth guard (e.g., JWT)
   @IsNotEmpty()
   @IsNumber()
   userId: number;

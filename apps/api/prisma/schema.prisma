@@ -24,6 +24,9 @@ model Order {
   id             String      @id @default(uuid())
   userId         Int
   user           User        @relation(fields: [userId], references: [id])
+  
+  tradingPair    String      // NEW: e.g., "BTC-USD"
+
   type           OrderType
   status         OrderStatus
   price          Decimal     @db.Decimal(18, 8)
@@ -37,10 +40,14 @@ model Order {
 
   @@index([userId])
   @@index([status, price, createdAt])
+  @@index([tradingPair]) // NEW: Index for fast lookups by market
 }
 
 model Trade {
   id          String   @id @default(uuid())
+  
+  tradingPair String   // NEW: e.g., "BTC-USD"
+
   buyOrderId  String
   sellOrderId String
   quantity    Decimal  @db.Decimal(18, 8)
@@ -50,6 +57,7 @@ model Trade {
   createdAt   DateTime @default(now())
 
   @@index([createdAt])
+  @@index([tradingPair]) // NEW: Index for fast lookups by market
 }
 
 enum OrderType {

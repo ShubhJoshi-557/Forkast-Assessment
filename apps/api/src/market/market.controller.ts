@@ -1,17 +1,19 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { MarketService } from './market.service';
 
 @Controller('market')
 export class MarketController {
   constructor(private readonly marketService: MarketService) {}
 
-  @Get('trades')
-  getTrades() {
-    return this.marketService.getRecentTrades();
+  // Route is now parameterized: e.g., /market/BTC-USD/trades
+  @Get(':tradingPair/trades')
+  getTrades(@Param('tradingPair') tradingPair: string) {
+    return this.marketService.getRecentTrades(tradingPair.toUpperCase());
   }
 
-  @Get('orderbook')
-  getOrderBook() {
-    return this.marketService.getOrderBook();
+  // Route is now parameterized: e.g., /market/BTC-USD/orderbook
+  @Get(':tradingPair/orderbook')
+  getOrderBook(@Param('tradingPair') tradingPair: string) {
+    return this.marketService.getOrderBook(tradingPair.toUpperCase());
   }
 }

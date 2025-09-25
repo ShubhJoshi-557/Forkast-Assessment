@@ -11,7 +11,9 @@
   "license": "ISC",
   "packageManager": "pnpm@10.17.1",
   "dependencies": {
-    "date-fns": "^4.1.0"
+    "date-fns": "^4.1.0",
+    "global": "^4.4.0",
+    "pm2": "^6.0.13"
   },
   "devDependencies": {
     "@types/date-fns": "^2.6.3"
