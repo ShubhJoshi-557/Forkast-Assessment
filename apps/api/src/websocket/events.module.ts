@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
-import { KafkaModule } from '../kafka/kafka.module';
+import { KafkaModule } from 'src/kafka/kafka.module';
 import { EventsConsumerService } from './events.consumer.service';
 import { EventsGateway } from './events.gateway';
 
 @Module({
   imports: [KafkaModule],
-  providers: [EventsGateway, EventsConsumerService], // Both must be provided here
+  providers: [EventsGateway, EventsConsumerService],
+  // --- ADD THIS 'exports' ARRAY ---
+  // This makes EventsGateway available for injection in other modules.
+  exports: [EventsGateway],
 })
 export class EventsModule {}

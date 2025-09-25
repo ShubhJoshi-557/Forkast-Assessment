@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
@@ -15,14 +12,19 @@ export class RedisIoAdapter extends IoAdapter {
 
     await Promise.all([pubClient.connect(), subClient.connect()]);
 
-    // UPDATED: Add comments to ignore the type error on the next line
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore - The types from the redis v4 library are complex, but compatible.
     this.adapterConstructor = createAdapter(pubClient, subClient);
   }
 
   createIOServer(port: number, options?: ServerOptions): Server {
-    const server = super.createIOServer(port, options) as Server;
+    // The explicit ': ServerOptions' type is removed from the next line
+    const serverOptionsWithCors = {
+      ...options,
+      // We add the CORS and transport settings from your old main.ts here
+      cors: { origin: '*' },
+      transports: ['websocket'],
+    };
+
+    const server = super.createIOServer(port, serverOptionsWithCors) as Server;
     server.adapter(this.adapterConstructor);
     return server;
   }

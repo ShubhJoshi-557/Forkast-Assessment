@@ -63,7 +63,7 @@ export class MatchingEngineService implements OnModuleInit {
         data: {
           id: order.id,
           userId: order.userId,
-          tradingPair: order.tradingPair, // NEW: Save tradingPair
+          tradingPair: order.tradingPair,
           type: order.type,
           status: OrderStatus.OPEN,
           price: new Prisma.Decimal(order.price),
@@ -72,11 +72,16 @@ export class MatchingEngineService implements OnModuleInit {
         },
       });
 
+      await this.kafkaProducer.produce({
+        topic: 'orders.updated',
+        messages: [{ key: newOrder.id, value: JSON.stringify(newOrder) }],
+      });
+
       let remainingQuantity = newOrder.quantity;
 
       const opposingOrders = await tx.order.findMany({
         where: {
-          tradingPair: newOrder.tradingPair, // NEW: Only match orders in the same market
+          tradingPair: newOrder.tradingPair,
           type:
             newOrder.type === OrderType.BUY ? OrderType.SELL : OrderType.BUY,
           status: { in: [OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED] },
