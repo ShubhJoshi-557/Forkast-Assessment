@@ -1,5 +1,5 @@
 # docker-compose.yml
-version: '3.8'
+version: "3.8"
 services:
   postgres:
     image: postgres:15
@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: orderbook
     ports:
-      - '5432:5432'
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -17,7 +17,7 @@ services:
     image: redis:7-alpine
     restart: always
     ports:
-      - '6379:6379'
+      - "6379:6379"
     volumes:
       - redis_data:/data
 
@@ -31,15 +31,15 @@ services:
     depends_on:
       - zookeeper
     ports:
-      - '9092:9092'
-      - '29092:29092' # For external access from your NestJS app
+      - "9092:9092"
+      - "29092:29092" # For external access from your NestJS app
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      KAFKA_CFG_NUM_PARTITIONS: '24'
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_CFG_NUM_PARTITIONS: "24"
       KAFKA_NUM_NETWORK_THREADS: 3
       KAFKA_NUM_IO_THREADS: 8
       KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600

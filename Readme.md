@@ -30,29 +30,29 @@ graph TB
         B[Real-time Charts<br/>Lightweight Charts]
         C[Order Book UI<br/>React Components]
     end
-    
+
     subgraph "API Gateway Layer"
         D[NestJS API Gateway<br/>Port 3001]
         E[Order Validation<br/>DTO Validation]
         F[WebSocket Gateway<br/>Socket.IO]
     end
-    
+
     subgraph "Event Streaming Layer"
         G[Apache Kafka<br/>Port 9092]
         H[ZooKeeper<br/>Port 2181]
     end
-    
+
     subgraph "Processing Layer"
         I[Matching Engine<br/>Dedicated Service]
         J[Charts Service<br/>Real-time Aggregation]
         K[Events Consumer<br/>WebSocket Broadcasting]
     end
-    
+
     subgraph "Data Layer"
         L[PostgreSQL<br/>Port 5432]
         M[Redis<br/>Port 6379]
     end
-    
+
     A --> D
     B --> F
     C --> F
@@ -71,21 +71,22 @@ graph TB
 
 ### **Technology Stack & Rationale**
 
-| Component | Technology | Why Chosen | Performance Benefits |
-|-----------|------------|------------|---------------------|
-| **Frontend** | Next.js 15 + React 19 | Server-side rendering, optimized builds | 50% faster page loads |
-| **Backend** | NestJS + TypeScript | Enterprise-grade, decorator-based architecture | Type safety, dependency injection |
-| **Database** | PostgreSQL + Prisma | ACID compliance for financial data | Decimal precision, complex queries |
-| **Message Queue** | Apache Kafka | High-throughput event streaming | 1000+ orders/sec processing |
-| **Cache** | Redis | In-memory data store | Sub-millisecond response times |
-| **WebSockets** | Socket.IO + Redis Adapter | Real-time bidirectional communication | Horizontal scaling support |
-| **Charts** | Lightweight Charts | High-performance financial charts | 60fps rendering, low memory |
+| Component         | Technology                | Why Chosen                                     | Performance Benefits               |
+| ----------------- | ------------------------- | ---------------------------------------------- | ---------------------------------- |
+| **Frontend**      | Next.js 15 + React 19     | Server-side rendering, optimized builds        | 50% faster page loads              |
+| **Backend**       | NestJS + TypeScript       | Enterprise-grade, decorator-based architecture | Type safety, dependency injection  |
+| **Database**      | PostgreSQL + Prisma       | ACID compliance for financial data             | Decimal precision, complex queries |
+| **Message Queue** | Apache Kafka              | High-throughput event streaming                | 1000+ orders/sec processing        |
+| **Cache**         | Redis                     | In-memory data store                           | Sub-millisecond response times     |
+| **WebSockets**    | Socket.IO + Redis Adapter | Real-time bidirectional communication          | Horizontal scaling support         |
+| **Charts**        | Lightweight Charts        | High-performance financial charts              | 60fps rendering, low memory        |
 
 ---
 
 ## 🚀 **Key Features**
 
 ### **🎯 Core Trading Features**
+
 - **Real-time Order Matching**: Price-time priority algorithm with microsecond precision
 - **Multi-Market Support**: Trade across 10+ cryptocurrency pairs (BTC-USD, ETH-USD, etc.)
 - **Live Order Book**: Real-time bid/ask visualization with depth charts
@@ -93,12 +94,14 @@ graph TB
 - **Order Management**: Complete order lifecycle tracking (OPEN → PARTIALLY_FILLED → FILLED)
 
 ### **📊 Advanced Analytics**
+
 - **Real-time Candlestick Charts**: 10-second, 1-minute, 1-hour, and 1-day intervals
 - **Trade History**: Complete transaction history with timestamps
 - **Market Depth**: Visual representation of order book depth
 - **Price Alerts**: Real-time price movement notifications
 
 ### **⚡ Performance Features**
+
 - **High-Frequency Trading**: Handles 1000+ orders per second
 - **Low Latency**: Sub-50ms order processing
 - **Horizontal Scaling**: Redis-based WebSocket scaling
@@ -106,6 +109,7 @@ graph TB
 - **Memory Management**: PM2 process orchestration
 
 ### **🔒 Enterprise Features**
+
 - **Data Integrity**: ACID-compliant database transactions
 - **Event Sourcing**: Complete audit trail via Kafka
 - **Fault Tolerance**: Automatic failover and recovery
@@ -118,31 +122,31 @@ graph TB
 
 ### **Order Management**
 
-| Method | Endpoint | Description | Request Body | Response |
-|--------|----------|-------------|--------------|----------|
+| Method | Endpoint  | Description     | Request Body                                                                                | Response                                                           |
+| ------ | --------- | --------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `POST` | `/orders` | Place new order | `{ "tradingPair": "BTC-USD", "type": "BUY", "price": 50000, "quantity": 0.1, "userId": 1 }` | `{ "message": "Order submitted successfully", "orderId": "uuid" }` |
 
 ### **Market Data**
 
-| Method | Endpoint | Description | Parameters | Response |
-|--------|----------|-------------|------------|----------|
-| `GET` | `/market/:tradingPair/orderbook` | Get order book | `tradingPair` (e.g., "BTC-USD") | `{ "bids": [...], "asks": [...] }` |
-| `GET` | `/market/:tradingPair/trades` | Get recent trades | `tradingPair` | `[{ "id": "uuid", "price": "50000", "quantity": "0.1", "createdAt": "2024-01-01T00:00:00Z" }]` |
+| Method | Endpoint                         | Description       | Parameters                      | Response                                                                                       |
+| ------ | -------------------------------- | ----------------- | ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `GET`  | `/market/:tradingPair/orderbook` | Get order book    | `tradingPair` (e.g., "BTC-USD") | `{ "bids": [...], "asks": [...] }`                                                             |
+| `GET`  | `/market/:tradingPair/trades`    | Get recent trades | `tradingPair`                   | `[{ "id": "uuid", "price": "50000", "quantity": "0.1", "createdAt": "2024-01-01T00:00:00Z" }]` |
 
 ### **Charts & Analytics**
 
-| Method | Endpoint | Description | Query Parameters | Response |
-|--------|----------|-------------|------------------|----------|
-| `GET` | `/charts/:tradingPair/candles` | Get candlestick data | `interval` (10 second, 1 minute, 1 hour, 1 day) | `[{ "time": 1640995200, "open": 50000, "high": 51000, "low": 49000, "close": 50500, "volume": 100 }]` |
+| Method | Endpoint                       | Description          | Query Parameters                                | Response                                                                                              |
+| ------ | ------------------------------ | -------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GET`  | `/charts/:tradingPair/candles` | Get candlestick data | `interval` (10 second, 1 minute, 1 hour, 1 day) | `[{ "time": 1640995200, "open": 50000, "high": 51000, "low": 49000, "close": 50500, "volume": 100 }]` |
 
 ### **WebSocket Events**
 
-| Event | Description | Data Structure |
-|-------|-------------|----------------|
-| `subscribe` | Subscribe to market updates | `{ "room": "BTC-USD" }` |
-| `new_trade` | New trade executed | `{ "id": "uuid", "tradingPair": "BTC-USD", "price": "50000", "quantity": "0.1", "createdAt": "2024-01-01T00:00:00Z" }` |
-| `order_update` | Order status changed | `{ "id": "uuid", "status": "FILLED", "filledQuantity": "0.1", ... }` |
-| `candle_update` | Real-time candle update | `{ "time": 1640995200, "open": 50000, "high": 51000, "low": 49000, "close": 50500, "volume": 100 }` |
+| Event           | Description                 | Data Structure                                                                                                         |
+| --------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `subscribe`     | Subscribe to market updates | `{ "room": "BTC-USD" }`                                                                                                |
+| `new_trade`     | New trade executed          | `{ "id": "uuid", "tradingPair": "BTC-USD", "price": "50000", "quantity": "0.1", "createdAt": "2024-01-01T00:00:00Z" }` |
+| `order_update`  | Order status changed        | `{ "id": "uuid", "status": "FILLED", "filledQuantity": "0.1", ... }`                                                   |
+| `candle_update` | Real-time candle update     | `{ "time": 1640995200, "open": 50000, "high": 51000, "low": 49000, "close": 50500, "volume": 100 }`                    |
 
 ---
 
@@ -178,7 +182,7 @@ pnpm prisma db seed
 cd apps/api
 pnpm start:dev
 
-# Terminal 2: Frontend  
+# Terminal 2: Frontend
 cd apps/web
 pnpm dev
 ```
@@ -214,6 +218,7 @@ pm2 monit
 The matching engine implements a sophisticated **Price-Time Priority** algorithm:
 
 1. **Price Priority**: Orders are matched by price (best price first)
+
    - Buy orders: Highest price first
    - Sell orders: Lowest price first
 
@@ -235,14 +240,14 @@ sequenceDiagram
     Client->>API: POST /orders
     API->>Kafka: Publish to orders.new
     API->>Client: Order submitted
-    
+
     Kafka->>MatchingEngine: Consume order
     MatchingEngine->>Database: Create order
     MatchingEngine->>Database: Find matching orders
     MatchingEngine->>Database: Execute trades (batch)
     MatchingEngine->>Kafka: Publish trade events
     MatchingEngine->>Kafka: Publish order updates
-    
+
     Kafka->>WebSocket: Consume events
     WebSocket->>Client: Real-time updates
 ```
@@ -260,18 +265,21 @@ sequenceDiagram
 ## 📊 **Performance Metrics**
 
 ### **Throughput**
+
 - **Order Processing**: 1000+ orders per second
 - **Trade Execution**: 500+ trades per second
 - **WebSocket Events**: 10,000+ events per second
 - **Database Queries**: <10ms average response time
 
 ### **Latency**
+
 - **Order Submission**: <50ms end-to-end
 - **Trade Execution**: <100ms average
 - **WebSocket Updates**: <10ms broadcast time
 - **Chart Updates**: <5ms rendering time
 
 ### **Scalability**
+
 - **Concurrent Users**: 10,000+ WebSocket connections
 - **Database**: Handles 1M+ orders per day
 - **Memory Usage**: <2GB per matching engine instance
@@ -301,20 +309,20 @@ REDIS_URL="redis://localhost:6379"
 module.exports = {
   apps: [
     {
-      name: 'api-cluster',
-      script: 'dist/src/main.js',
+      name: "api-cluster",
+      script: "dist/src/main.js",
       instances: 4,
-      exec_mode: 'cluster',
-      max_memory_restart: '512M'
+      exec_mode: "cluster",
+      max_memory_restart: "512M",
     },
     {
-      name: 'matching-engine',
-      script: 'dist/src/matching/matching.engine.main.js',
+      name: "matching-engine",
+      script: "dist/src/matching/matching.engine.main.js",
       instances: 1,
-      exec_mode: 'fork',
-      max_memory_restart: '2500M'
-    }
-  ]
+      exec_mode: "fork",
+      max_memory_restart: "2500M",
+    },
+  ],
 };
 ```
 
@@ -352,17 +360,20 @@ artillery run load-testing/test.js
 ## 📈 **Monitoring & Observability**
 
 ### **Logs**
+
 - **Structured Logging**: JSON format with correlation IDs
 - **Log Levels**: DEBUG, INFO, WARN, ERROR
 - **Log Aggregation**: Centralized logging with PM2
 
 ### **Metrics**
+
 - **Kafka Lag**: Consumer group lag monitoring
 - **Database Performance**: Query execution times
 - **Memory Usage**: Process memory consumption
 - **WebSocket Connections**: Active connection counts
 
 ### **Health Checks**
+
 - **API Health**: `GET /health`
 - **Database Health**: Connection pool status
 - **Kafka Health**: Broker connectivity
@@ -375,12 +386,14 @@ artillery run load-testing/test.js
 ### **Common Issues**
 
 1. **Kafka Consumer Lag**
+
    ```bash
    # Check consumer group status
    kafka-consumer-groups --describe --all-groups
    ```
 
 2. **Database Connection Issues**
+
    ```bash
    # Check database connectivity
    cd apps/api
@@ -396,6 +409,7 @@ artillery run load-testing/test.js
 ### **Performance Issues**
 
 1. **High Memory Usage**
+
    - Check PM2 memory limits
    - Monitor garbage collection
    - Review database connection pool

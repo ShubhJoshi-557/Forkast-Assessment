@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Forkast | Assessment",
+  title: "Forkast | Shubh Joshi'sAssessment",
   description: "OrderBook Assessment for Backend Engineer Role",
 };
 

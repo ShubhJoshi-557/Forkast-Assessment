@@ -109,14 +109,12 @@ export function OrderBook({ orderBook, tradingPair }: OrderBookProps) {
                     style={{ width: `${fillPercent}%` }}
                   />
                   <span className="text-green-500 z-10">
-                    {/* {Number(bid.price).toFixed(2)} */}
                     {Number(bid.price).toLocaleString("en-US", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </span>
                   <span className="z-10">
-                    {/* {Number(bid.quantity).toFixed(4)} */}
                     {Number(bid.quantity).toLocaleString("en-US", {
                       minimumFractionDigits: 4,
                       maximumFractionDigits: 4,

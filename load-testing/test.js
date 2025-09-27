@@ -18,7 +18,7 @@ export const options = {
   scenarios: {
     orders: {
       executor: 'constant-vus',
-      vus: 5,               // 35 VUs
+      vus: 50,               // 35 VUs
       duration: '1m',
       exec: 'placeOrders',
     },

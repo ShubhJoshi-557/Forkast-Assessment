@@ -36,7 +36,6 @@ function getPriceDirection(
 
 export function TradeHistory({ trades, tradingPair }: TradeHistoryProps) {
   const [baseAsset, quoteAsset] = tradingPair.split("-");
-  console.log(trades);
 
   return (
     <div className="bg-gray-800 rounded-lg p-4 flex flex-col h-full">

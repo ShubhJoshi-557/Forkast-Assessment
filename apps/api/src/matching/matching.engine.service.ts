@@ -1,147 +1,298 @@
-// explain this in detail and the bug it has:
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OrderStatus, OrderType, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Consumer, Kafka } from 'kafkajs';
 import { KafkaProducerService } from '../kafka/kafka.producer.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-// UPDATED: Added tradingPair to the payload type
-type NewOrderPayload = {
+/**
+ * Payload structure for new orders received from Kafka.
+ *
+ * This type defines the structure of order data that flows through the system
+ * from the API gateway to the matching engine via Kafka.
+ */
+interface NewOrderPayload {
   id: string;
   userId: number;
   tradingPair: string;
   type: OrderType;
   price: number;
   quantity: number;
-};
+}
 
+/**
+ * Result structure for batch trade processing.
+ * Contains all trades executed and orders updated during a single order processing cycle.
+ */
+interface TradeProcessingResult {
+  newOrder: {
+    id: string;
+    tradingPair: string;
+  };
+  trades: Array<{
+    id: string;
+    tradingPair: string;
+    buyOrderId: string;
+    sellOrderId: string;
+    quantity: Prisma.Decimal;
+    price: Prisma.Decimal;
+    createdAt: Date;
+  }>;
+  orderUpdates: Array<{
+    id: string;
+    userId: number;
+    tradingPair: string;
+    type: OrderType;
+    status: OrderStatus;
+    price: Prisma.Decimal;
+    quantity: Prisma.Decimal;
+    filledQuantity: Prisma.Decimal;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+}
+
+/**
+ * MatchingEngineService is the core component responsible for order matching and trade execution.
+ *
+ * This service implements a high-performance matching engine that:
+ * - Consumes orders from Kafka 'orders.new' topic
+ * - Implements Price-Time Priority matching algorithm
+ * - Executes trades in batches for optimal performance
+ * - Publishes trade and order update events
+ * - Maintains data consistency through database transactions
+ *
+ * The matching algorithm ensures:
+ * - Price priority: Best prices are matched first
+ * - Time priority: Earlier orders at same price are matched first
+ * - Atomicity: All trades for an order are processed in a single transaction
+ * - Idempotency: Duplicate orders are handled gracefully
+ */
 @Injectable()
 export class MatchingEngineService implements OnModuleInit {
+  private readonly logger = new Logger(MatchingEngineService.name);
   private readonly kafka: Kafka;
   private readonly consumer: Consumer;
 
+  // Configuration constants for optimal performance
+  private static readonly BATCH_SIZE = 10; // Process trades in batches of 10
+  private static readonly HEARTBEAT_INTERVAL = 5; // Send heartbeat every 5 messages
+  private static readonly MAX_CONCURRENT_PARTITIONS = 8; // Process up to 8 partitions concurrently
+
   constructor(
-    private prisma: PrismaService,
-    private kafkaProducer: KafkaProducerService,
+    private readonly prisma: PrismaService,
+    private readonly kafkaProducer: KafkaProducerService,
   ) {
+    // Validate required environment variables
     if (!process.env.KAFKA_BROKER_URL) {
       throw new Error(
-        'KAFKA_BROKER_URL is not defined in the environment variables.',
+        'KAFKA_BROKER_URL is not defined in the environment variables',
       );
     }
+
+    // Initialize Kafka client with optimized settings
     this.kafka = new Kafka({
       brokers: [process.env.KAFKA_BROKER_URL],
-      requestTimeout: 300,
+      requestTimeout: 30000, // 30 second request timeout
     });
+
+    // Configure consumer with performance-optimized settings
     this.consumer = this.kafka.consumer({
       groupId: 'matching-engine',
-      sessionTimeout: 60000, // Increase to 60 seconds
-      heartbeatInterval: 10000, // Increase to 10 seconds
-      rebalanceTimeout: 120000, // Increase to 2 minutes
-      maxWaitTimeInMs: 5000, // Add max wait time
-      metadataMaxAge: 300000,
-      maxBytesPerPartition: 1048576, // 1MB
-      minBytes: 1,
-      maxBytes: 10485760, // 10MB
+      sessionTimeout: 60000, // 60 second session timeout
+      heartbeatInterval: 10000, // 10 second heartbeat interval
+      rebalanceTimeout: 120000, // 2 minute rebalance timeout
+      maxWaitTimeInMs: 5000, // Max wait time for batch collection
+      metadataMaxAge: 300000, // 5 minute metadata cache
+      maxBytesPerPartition: 1048576, // 1MB per partition
+      minBytes: 1, // Minimum bytes to collect
+      maxBytes: 10485760, // 10MB maximum batch size
     });
   }
 
-  async onModuleInit() {
-    await this.consumer.connect();
-    await this.consumer.subscribe({ topic: 'orders.new' });
+  /**
+   * Initializes the matching engine by connecting to Kafka and starting message consumption.
+   *
+   * This method sets up the Kafka consumer to process orders from the 'orders.new' topic
+   * and handles the complete order processing lifecycle.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      this.logger.log('Initializing matching engine...');
 
-    await this.consumer.run({
-      partitionsConsumedConcurrently: 8,
-      eachBatchAutoResolve: true,
-      eachBatch: async ({
-        batch,
-        heartbeat,
-      }: {
-        batch: any;
-        heartbeat: () => Promise<void>;
-      }) => {
-        let messageCount = 0;
+      // Connect to Kafka
+      await this.consumer.connect();
+      this.logger.log('Connected to Kafka successfully');
 
+      // Subscribe to orders topic
+      await this.consumer.subscribe({ topic: 'orders.new' });
+      this.logger.log('Subscribed to orders.new topic');
+
+      // Start consuming messages with optimized batch processing
+      await this.consumer.run({
+        partitionsConsumedConcurrently:
+          MatchingEngineService.MAX_CONCURRENT_PARTITIONS,
+        eachBatchAutoResolve: true,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        eachBatch: this.handleBatch.bind(this),
+      });
+
+      this.logger.log('Matching engine started successfully');
+    } catch (error: unknown) {
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error('Failed to initialize matching engine', errorStack);
+      throw error;
+    }
+  }
+
+  /**
+   * Handles a batch of messages from Kafka.
+   *
+   * This method processes multiple orders in a single batch for optimal performance,
+   * with proper heartbeat management to prevent consumer group rebalancing.
+   *
+   * @param batch - Kafka message batch
+   * @param heartbeat - Function to send heartbeat to Kafka
+   */
+  private async handleBatch({
+    batch,
+    heartbeat,
+  }: {
+    batch: any;
+    heartbeat: () => Promise<void>;
+  }): Promise<void> {
+    let messageCount = 0;
+    const batchStartTime = Date.now();
+
+    try {
+      // Process each message in the batch
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      for (const message of batch.messages) {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        for (const message of batch.messages) {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          if (!message.value) continue;
-
-          // Send heartbeat every 5 messages to prevent session timeout
-          if (messageCount % 5 === 0) {
-            await heartbeat();
-          }
-
-          const incomingOrder = JSON.parse(
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument
-            message.value.toString(),
-          ) as NewOrderPayload;
-
-          await this.processOrder(incomingOrder);
-          messageCount++;
+        if (!message.value) {
+          this.logger.warn('Received message with no value, skipping');
+          continue;
         }
 
-        // Send final heartbeat after processing batch
-        await heartbeat();
-      },
-    });
-  }
+        // Send heartbeat periodically to prevent session timeout
+        if (messageCount % MatchingEngineService.HEARTBEAT_INTERVAL === 0) {
+          await heartbeat();
+        }
 
-  private async processOrder(order: NewOrderPayload) {
-    try {
-      console.log(
-        `🔄 Processing order: ${order.id} (${order.type} ${order.quantity} @ ${order.price})`,
-      );
-
-      // Step 1: Create order (quick transaction)
-      const newOrder = await this.createOrder(order);
-      if (!newOrder) {
-        console.log(`⚠️ Order ${order.id} already exists, skipping`);
-        return; // Order already exists (idempotent)
+        // Parse and process the order
+        const incomingOrder = JSON.parse(
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument
+          message.value.toString(),
+        ) as NewOrderPayload;
+        await this.processOrder(incomingOrder);
+        messageCount++;
       }
 
-      console.log(`✅ Created order: ${newOrder.id}`);
+      // Send final heartbeat after processing entire batch
+      await heartbeat();
 
-      // Step 2: Find matching orders (optimized query)
+      const processingTime = Date.now() - batchStartTime;
+      this.logger.debug(
+        `Processed ${messageCount} orders in ${processingTime}ms`,
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(`Error processing batch: ${errorMessage}`, errorStack);
+      // Re-throw to trigger Kafka's retry mechanism
+      throw error;
+    }
+  }
+
+  /**
+   * Processes a single order through the complete matching engine workflow.
+   *
+   * This method implements the core order processing logic:
+   * 1. Creates the order in the database (idempotent)
+   * 2. Finds matching orders using optimized queries
+   * 3. Executes trades in batches for performance
+   * 4. Publishes events for real-time updates
+   *
+   * @param order - Order payload from Kafka
+   */
+  private async processOrder(order: NewOrderPayload): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      this.logger.log(
+        `Processing order ${order.id}: ${order.type} ${order.quantity} @ ${order.price} for ${order.tradingPair}`,
+      );
+
+      // Step 1: Create order in database (idempotent operation)
+      const newOrder = await this.createOrder(order);
+      if (!newOrder) {
+        this.logger.warn(
+          `Order ${order.id} already exists, skipping (idempotent)`,
+        );
+        return;
+      }
+
+      this.logger.debug(`Created order ${newOrder.id} in database`);
+
+      // Step 2: Find matching orders using optimized database query
       const matchingOrders = await this.findMatchingOrders(newOrder);
-      console.log(
-        `🔍 Found ${matchingOrders.length} matching orders for ${newOrder.id}`,
+      this.logger.debug(
+        `Found ${matchingOrders.length} matching orders for ${newOrder.id}`,
       );
 
       if (matchingOrders.length === 0) {
-        // No matches, just publish the new order
-        console.log(
-          `📤 No matches found, publishing order update for ${newOrder.id}`,
+        // No matches found, publish order update and exit
+        this.logger.debug(
+          `No matches found for order ${newOrder.id}, publishing order update`,
         );
         await this.publishOrderUpdate(newOrder);
         return;
       }
 
-      // Step 3: Process trades in smaller batches to avoid long transactions
-      console.log(
-        `⚡ Processing ${matchingOrders.length} matching orders in batches`,
+      // Step 3: Process trades in batches to optimize database performance
+      this.logger.debug(
+        `Processing ${matchingOrders.length} matching orders in batches`,
       );
       const result = await this.processTradesInBatches(
         newOrder,
         matchingOrders,
       );
-      console.log(
-        `✅ Processed ${result.trades.length} trades for order ${newOrder.id}`,
+
+      this.logger.log(
+        `Executed ${result.trades.length} trades for order ${newOrder.id} in ${Date.now() - startTime}ms`,
       );
 
-      // Step 4: Publish all events asynchronously (non-blocking)
+      // Step 4: Publish all events asynchronously for real-time updates
       await this.publishEventsAsync(result);
-      console.log(`📤 Published events for order ${newOrder.id}`);
-    } catch (error) {
-      console.error(`❌ Error processing order ${order.id}:`, error);
+      this.logger.debug(`Published events for order ${newOrder.id}`);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(
+        `Failed to process order ${order.id}: ${errorMessage}`,
+        errorStack,
+      );
       throw error;
     }
   }
 
+  /**
+   * Creates a new order in the database with idempotency support.
+   *
+   * This method handles duplicate order creation gracefully by catching
+   * unique constraint violations and returning null for idempotent behavior.
+   *
+   * @param order - Order data to create
+   * @returns Created order or null if already exists (idempotent)
+   */
   private async createOrder(order: NewOrderPayload) {
     try {
-      return await this.prisma.order.create({
+      const createdOrder = await this.prisma.order.create({
         data: {
           id: order.id,
           userId: order.userId,
@@ -153,41 +304,130 @@ export class MatchingEngineService implements OnModuleInit {
           filledQuantity: new Prisma.Decimal(0),
         },
       });
-    } catch (err: unknown) {
-      // P2002: Unique constraint violation -> order already created; skip re-processing
-      if (
-        typeof err === 'object' &&
-        err !== null &&
-        (err as { code?: string }).code === 'P2002'
-      ) {
+
+      this.logger.debug(`Created order ${createdOrder.id} in database`);
+      return createdOrder;
+    } catch (error: unknown) {
+      // Handle Prisma unique constraint violation (P2002)
+      if (this.isPrismaUniqueConstraintError(error)) {
+        this.logger.debug(
+          `Order ${order.id} already exists, skipping (idempotent)`,
+        );
         return null; // Idempotent no-op
       }
-      throw err;
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(
+        `Failed to create order ${order.id}: ${errorMessage}`,
+        errorStack,
+      );
+      throw error;
     }
   }
 
+  /**
+   * Checks if an error is a Prisma unique constraint violation.
+   *
+   * @param error - Error to check
+   * @returns True if it's a unique constraint violation
+   */
+  private isPrismaUniqueConstraintError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code: string }).code === 'P2002'
+    );
+  }
+
+  /**
+   * Finds orders that can be matched with the incoming order using Price-Time Priority.
+   *
+   * This method implements the core matching logic:
+   * - For BUY orders: finds SELL orders with price <= incoming price
+   * - For SELL orders: finds BUY orders with price >= incoming price
+   * - Orders are sorted by price (best first) then by time (earliest first)
+   * - Only OPEN and PARTIALLY_FILLED orders are considered
+   *
+   * @param newOrder - Order to find matches for
+   * @returns Array of matching orders sorted by priority
+   */
   private async findMatchingOrders(newOrder: {
     tradingPair: string;
     type: OrderType;
     price: Prisma.Decimal;
-  }) {
-    return await this.prisma.order.findMany({
-      where: {
-        tradingPair: newOrder.tradingPair,
-        type: newOrder.type === OrderType.BUY ? OrderType.SELL : OrderType.BUY,
-        status: { in: [OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED] },
-        price:
-          newOrder.type === OrderType.BUY
-            ? { lte: newOrder.price }
-            : { gte: newOrder.price },
-      },
-      orderBy: [
-        { price: newOrder.type === OrderType.BUY ? 'asc' : 'desc' },
-        { createdAt: 'asc' },
-      ], // Limit to prevent excessive processing
-    });
+  }): Promise<
+    Array<{
+      id: string;
+      quantity: Prisma.Decimal;
+      filledQuantity: Prisma.Decimal;
+      price: Prisma.Decimal;
+    }>
+  > {
+    try {
+      const matchingOrders = await this.prisma.order.findMany({
+        where: {
+          tradingPair: newOrder.tradingPair,
+          // Find opposite order type (BUY matches with SELL, and vice versa)
+          type:
+            newOrder.type === OrderType.BUY ? OrderType.SELL : OrderType.BUY,
+          // Only consider orders that can still be filled
+          status: { in: [OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED] },
+          // Price matching logic:
+          // - BUY orders match with SELL orders at or below the buy price
+          // - SELL orders match with BUY orders at or above the sell price
+          price:
+            newOrder.type === OrderType.BUY
+              ? { lte: newOrder.price } // BUY: find SELL orders with price <= buy price
+              : { gte: newOrder.price }, // SELL: find BUY orders with price >= sell price
+        },
+        orderBy: [
+          // Price priority: best price first
+          { price: newOrder.type === OrderType.BUY ? 'asc' : 'desc' },
+          // Time priority: earliest order first at same price
+          { createdAt: 'asc' },
+        ],
+        select: {
+          id: true,
+          quantity: true,
+          filledQuantity: true,
+          price: true,
+        },
+      });
+
+      this.logger.debug(
+        `Found ${matchingOrders.length} potential matches for ${newOrder.tradingPair}`,
+      );
+      return matchingOrders;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(
+        `Failed to find matching orders: ${errorMessage}`,
+        errorStack,
+      );
+      throw error;
+    }
   }
 
+  /**
+   * Processes trades in batches to optimize database performance and prevent long transactions.
+   *
+   * This method implements the core trade execution logic:
+   * - Processes matching orders in batches of 10 to avoid long database transactions
+   * - Executes trades atomically within each batch
+   * - Updates order statuses based on fill quantities
+   * - Tracks remaining quantity to fill
+   *
+   * @param newOrder - The incoming order to match against
+   * @param matchingOrders - Array of orders that can be matched
+   * @returns TradeProcessingResult containing all executed trades and order updates
+   */
   private async processTradesInBatches(
     newOrder: {
       id: string;
@@ -201,7 +441,7 @@ export class MatchingEngineService implements OnModuleInit {
       filledQuantity: Prisma.Decimal;
       price: Prisma.Decimal;
     }>,
-  ) {
+  ): Promise<TradeProcessingResult> {
     const trades: Array<{
       id: string;
       tradingPair: string;
@@ -266,15 +506,15 @@ export class MatchingEngineService implements OnModuleInit {
           );
 
           if (availableQuantity.isZero()) {
-            console.log(
-              `⚠️ Order ${opposingOrder.id} has no available quantity, skipping`,
+            this.logger.debug(
+              `Order ${opposingOrder.id} has no available quantity, skipping`,
             );
             continue;
           }
 
           const tradeQuantity = Decimal.min(batchRemaining, availableQuantity);
-          console.log(
-            `💱 Creating trade: ${tradeQuantity.toString()} @ ${opposingOrder.price.toString()} between ${newOrder.id} and ${opposingOrder.id}`,
+          this.logger.debug(
+            `Creating trade: ${tradeQuantity.toString()} @ ${opposingOrder.price.toString()} between ${newOrder.id} and ${opposingOrder.id}`,
           );
 
           // Create trade
@@ -311,7 +551,7 @@ export class MatchingEngineService implements OnModuleInit {
           batchTrades.push(trade);
 
           batchRemaining = batchRemaining.minus(tradeQuantity);
-          console.log(`📊 Remaining quantity: ${batchRemaining.toString()}`);
+          this.logger.debug(`Remaining quantity: ${batchRemaining.toString()}`);
         }
 
         return { batchTrades, batchUpdates, batchRemaining };
@@ -329,65 +569,67 @@ export class MatchingEngineService implements OnModuleInit {
     };
   }
 
-  private async publishEventsAsync(result: {
-    newOrder: {
-      id: string;
-      tradingPair: string;
-    };
-    trades: Array<{
-      id: string;
-      tradingPair: string;
-      buyOrderId: string;
-      sellOrderId: string;
-      quantity: Prisma.Decimal;
-      price: Prisma.Decimal;
-      createdAt: Date;
-    }>;
-    orderUpdates: Array<{
-      id: string;
-      userId: number;
-      tradingPair: string;
-      type: OrderType;
-      status: OrderStatus;
-      price: Prisma.Decimal;
-      quantity: Prisma.Decimal;
-      filledQuantity: Prisma.Decimal;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-  }) {
+  /**
+   * Publishes all trade and order update events to Kafka asynchronously.
+   *
+   * This method publishes:
+   * - Initial order update for the new order
+   * - All executed trades
+   * - All order status updates
+   *
+   * All events are published in parallel for optimal performance.
+   *
+   * @param result - Trade processing result containing all events to publish
+   */
+  private async publishEventsAsync(
+    result: TradeProcessingResult,
+  ): Promise<void> {
     // Publish all events asynchronously to avoid blocking
-    const publishPromises: Promise<any>[] = [];
+    const publishPromises: Promise<void>[] = [];
 
     // Initial order update
     publishPromises.push(
-      this.kafkaProducer.produce({
-        topic: 'orders.updated',
-        messages: [
-          { key: result.newOrder.id, value: JSON.stringify(result.newOrder) },
-        ],
-      }),
+      this.kafkaProducer
+        .produce({
+          topic: 'orders.updated',
+          messages: [
+            {
+              key: result.newOrder.id,
+              value: JSON.stringify(result.newOrder),
+            },
+          ],
+        })
+        .then(() => {}),
     );
 
     // Trade executions
     for (const trade of result.trades) {
       publishPromises.push(
-        this.kafkaProducer.produce({
-          topic: 'trades.executed',
-          messages: [{ key: trade.tradingPair, value: JSON.stringify(trade) }],
-        }),
+        this.kafkaProducer
+          .produce({
+            topic: 'trades.executed',
+            messages: [
+              { key: trade.tradingPair, value: JSON.stringify(trade) },
+            ],
+          })
+          .then(() => {}),
       );
     }
 
     // Order updates
     for (const orderUpdate of result.orderUpdates) {
       publishPromises.push(
-        this.kafkaProducer.produce({
-          topic: 'orders.updated',
-          messages: [
-            { key: orderUpdate.id, value: JSON.stringify(orderUpdate) },
-          ],
-        }),
+        this.kafkaProducer
+          .produce({
+            topic: 'orders.updated',
+            messages: [
+              {
+                key: orderUpdate.id,
+                value: JSON.stringify(orderUpdate),
+              },
+            ],
+          })
+          .then(() => {}),
       );
     }
 
@@ -395,18 +637,56 @@ export class MatchingEngineService implements OnModuleInit {
     await Promise.all(publishPromises);
   }
 
-  private async publishOrderUpdate(order: { id: string }) {
-    await this.kafkaProducer.produce({
-      topic: 'orders.updated',
-      messages: [{ key: order.id, value: JSON.stringify(order) }],
-    });
+  /**
+   * Publishes an order update event to Kafka.
+   *
+   * @param order - Order data to publish
+   */
+  private async publishOrderUpdate(order: { id: string }): Promise<void> {
+    try {
+      await this.kafkaProducer.produce({
+        topic: 'orders.updated',
+        messages: [{ key: order.id, value: JSON.stringify(order) }],
+      });
+      this.logger.debug(`Published order update for ${order.id}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish order update for ${order.id}:`,
+        error,
+      );
+      throw error;
+    }
   }
 
+  /**
+   * Updates an order's fill quantity and status within a database transaction.
+   *
+   * This method:
+   * - Calculates the new filled quantity
+   * - Determines the appropriate order status (OPEN, PARTIALLY_FILLED, FILLED)
+   * - Updates the order in the database
+   *
+   * @param tx - Prisma transaction client
+   * @param orderId - ID of the order to update
+   * @param quantity - Quantity to add to the filled amount
+   * @returns Updated order or null if order not found
+   */
   private async updateOrderFillInTransaction(
     tx: Prisma.TransactionClient,
     orderId: string,
     quantity: Decimal,
-  ) {
+  ): Promise<{
+    id: string;
+    userId: number;
+    tradingPair: string;
+    type: OrderType;
+    status: OrderStatus;
+    price: Prisma.Decimal;
+    quantity: Prisma.Decimal;
+    filledQuantity: Prisma.Decimal;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null> {
     const order = await tx.order.findUnique({ where: { id: orderId } });
     if (!order) return null;
 

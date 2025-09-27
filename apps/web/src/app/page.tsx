@@ -42,7 +42,8 @@ export default function Home() {
       <div className="flex flex-col h-screen bg-gray-900 text-white p-4 gap-4 font-mono overflow-hidden">
         {/* THIS IS THE CORRECT, COMPLETE HEADER */}
         <header className="flex justify-between items-center flex-shrink-0">
-          <h1 className="text-2xl font-bold">Real-Time Order Book</h1>
+          <h1 className="text-2xl font-bold">Forkast</h1>
+          <h2 className="text-lg font-bold">Shubh Joshi&apos;s Assessment</h2>
           <div className="flex items-center gap-2">
             <label htmlFor="market-select" className="text-sm text-gray-400">
               Market:

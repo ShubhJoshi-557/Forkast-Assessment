@@ -1,35 +1,75 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Admin, Kafka } from 'kafkajs';
 
+/**
+ * KafkaAdminService handles Kafka topic creation and management.
+ *
+ * This service is responsible for:
+ * - Creating required Kafka topics on startup
+ * - Managing topic configurations
+ * - Ensuring proper topic partitioning for performance
+ *
+ * Topics created:
+ * - orders.new: 8 partitions for order processing
+ * - orders.updated: 4 partitions for order updates
+ * - trades.executed: 4 partitions for trade executions
+ */
 @Injectable()
-export class KafkaAdminService implements OnModuleInit {
+export class KafkaAdminService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(KafkaAdminService.name);
   private readonly kafka: Kafka;
   private readonly admin: Admin;
 
   constructor() {
+    // Validate required environment variables
     if (!process.env.KAFKA_BROKER_URL) {
       throw new Error(
         'KAFKA_BROKER_URL is not defined in the environment variables.',
       );
     }
 
+    // Initialize Kafka client
     this.kafka = new Kafka({
       brokers: [process.env.KAFKA_BROKER_URL],
+      requestTimeout: 30000,
     });
 
     this.admin = this.kafka.admin();
   }
 
-  async onModuleInit() {
-    await this.admin.connect();
-    await this.createTopics();
+  /**
+   * Initializes the Kafka admin service and creates required topics.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      this.logger.log('Connecting to Kafka admin...');
+      await this.admin.connect();
+      await this.createTopics();
+      this.logger.log('Kafka admin service initialized successfully');
+    } catch (error) {
+      this.logger.error('Failed to initialize Kafka admin service:', error);
+      throw error;
+    }
   }
 
-  private async createTopics() {
+  /**
+   * Creates all required Kafka topics with optimized configurations.
+   *
+   * Topic configurations are optimized for:
+   * - High throughput order processing
+   * - Real-time event streaming
+   * - Horizontal scaling
+   */
+  private async createTopics(): Promise<void> {
     const topics = [
       {
         topic: 'orders.new',
-        numPartitions: 8, // Match consumer concurrency
+        numPartitions: 8, // Match consumer concurrency for high throughput
         replicationFactor: 1,
       },
       {
@@ -49,22 +89,30 @@ export class KafkaAdminService implements OnModuleInit {
         topics,
         waitForLeaders: true,
       });
-      console.log('✅ Kafka topics created successfully');
+      this.logger.log('Kafka topics created successfully');
     } catch (error) {
       // Topics might already exist, which is fine
       if (
         error instanceof Error &&
         error.message?.includes('Topic already exists')
       ) {
-        console.log('ℹ️ Kafka topics already exist');
+        this.logger.log('Kafka topics already exist');
       } else {
-        console.error('❌ Error creating Kafka topics:', error);
+        this.logger.error('Error creating Kafka topics:', error);
         throw error;
       }
     }
   }
 
-  async onModuleDestroy() {
-    await this.admin.disconnect();
+  /**
+   * Cleans up Kafka admin connections on module destruction.
+   */
+  async onModuleDestroy(): Promise<void> {
+    try {
+      await this.admin.disconnect();
+      this.logger.log('Kafka admin service disconnected');
+    } catch (error) {
+      this.logger.error('Error disconnecting Kafka admin:', error);
+    }
   }
 }

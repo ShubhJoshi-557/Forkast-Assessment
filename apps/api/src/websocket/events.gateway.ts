@@ -9,18 +9,38 @@ import {
 import { Order, Trade } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
 
-@WebSocketGateway({ cors: { origin: '*' } })
+/**
+ * EventsGateway handles WebSocket connections and real-time event broadcasting.
+ *
+ * This gateway manages:
+ * - Client connections and room subscriptions
+ * - Real-time trade broadcasts
+ * - Order update notifications
+ * - Room-based message routing for trading pairs
+ *
+ * Clients can subscribe to specific trading pairs to receive real-time updates.
+ */
+@WebSocketGateway({
+  cors: { origin: '*' },
+  namespace: '/',
+})
 export class EventsGateway {
   @WebSocketServer()
   server: Server;
 
-  private logger = new Logger('EventsGateway');
+  private readonly logger = new Logger(EventsGateway.name);
 
+  /**
+   * Handles client subscription to a trading pair room.
+   *
+   * @param client - WebSocket client connection
+   * @param payload - Subscription payload containing room name (trading pair)
+   */
   @SubscribeMessage('subscribe')
   handleSubscribe(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { room: string }, // 2. Add the decorator here
-  ) {
+    @MessageBody() payload: { room: string },
+  ): void {
     if (payload && payload.room) {
       this.logger.log(
         `Client ${client.id} subscribing to room: ${payload.room}`,
@@ -33,11 +53,17 @@ export class EventsGateway {
     }
   }
 
+  /**
+   * Handles client unsubscription from a trading pair room.
+   *
+   * @param client - WebSocket client connection
+   * @param payload - Unsubscription payload containing room name (trading pair)
+   */
   @SubscribeMessage('unsubscribe')
   handleUnsubscribe(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { room: string }, // 3. Add the decorator here too
-  ) {
+    @MessageBody() payload: { room: string },
+  ): void {
     if (payload && payload.room) {
       this.logger.log(
         `Client ${client.id} unsubscribing from room: ${payload.room}`,
@@ -46,16 +72,24 @@ export class EventsGateway {
     }
   }
 
-  broadcastTrade(trade: Trade) {
-    this.logger.log(
-      `Attempting to broadcast 'new_trade' to room: >> ${trade.tradingPair} <<`,
-    );
+  /**
+   * Broadcasts a new trade to all clients subscribed to the trading pair.
+   *
+   * @param trade - Trade data to broadcast
+   */
+  broadcastTrade(trade: Trade): void {
+    this.logger.debug(`Broadcasting new trade to room: ${trade.tradingPair}`);
     this.server.to(trade.tradingPair).emit('new_trade', trade);
   }
 
-  broadcastOrderUpdate(order: Order) {
-    this.logger.log(
-      `Attempting to broadcast 'order_update' to room: >> ${order.tradingPair} <<`,
+  /**
+   * Broadcasts an order update to all clients subscribed to the trading pair.
+   *
+   * @param order - Order data to broadcast
+   */
+  broadcastOrderUpdate(order: Order): void {
+    this.logger.debug(
+      `Broadcasting order update to room: ${order.tradingPair}`,
     );
     this.server.to(order.tradingPair).emit('order_update', order);
   }
