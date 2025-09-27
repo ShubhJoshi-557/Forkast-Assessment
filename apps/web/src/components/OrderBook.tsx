@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 interface Order {
   price: string;
   quantity: string; // remaining/open quantity
@@ -37,30 +35,11 @@ function getOrderStatusColor(order: Order, isAsk: boolean) {
 
 export function OrderBook({ orderBook, tradingPair }: OrderBookProps) {
   const [baseAsset, quoteAsset] = tradingPair.split("-");
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      window.location.reload();
-    } catch (error) {
-      console.error("Error refreshing orderbook:", error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
 
   return (
     <div className="bg-gray-800 rounded-lg p-4 flex flex-col h-full">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-center items-center mb-4">
         <h2 className="text-xl font-semibold">Order Book</h2>
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded disabled:opacity-50"
-        >
-          {isRefreshing ? "Refreshing..." : "Refresh"}
-        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-4 flex-grow min-h-0">
