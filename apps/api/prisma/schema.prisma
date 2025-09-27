@@ -41,6 +41,9 @@ model Order {
   @@index([userId])
   @@index([status, price, createdAt])
   @@index([tradingPair]) // NEW: Index for fast lookups by market
+  @@index([tradingPair, type, status, price]) // Optimized for matching engine queries
+  @@index([tradingPair, status, createdAt]) // For order book queries
+  @@index([type, status, price, createdAt]) // For price-based matching
 }
 
 model Trade {

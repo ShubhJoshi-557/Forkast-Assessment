@@ -1,0 +1,16 @@
+{
+  "name": "matching-algorithm-debug",
+  "version": "1.0.0",
+  "description": "Debug scripts for matching algorithm bug",
+  "main": "debug-matching-bug.js",
+  "scripts": {
+    "debug": "node debug-matching-bug.js",
+    "test": "node test-matching-bug.js",
+    "inspect": "node inspect-database.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "ws": "^8.14.0",
+    "@prisma/client": "^5.0.0"
+  }
+}

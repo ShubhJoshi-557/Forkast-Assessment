@@ -133,8 +133,10 @@ export function PlaceOrderForm({
       // Clear form on success
       setPrice("");
       setQuantity("");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to place order.");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to place order.";
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

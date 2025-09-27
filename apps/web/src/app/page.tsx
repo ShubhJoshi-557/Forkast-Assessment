@@ -8,7 +8,18 @@ import { useOrderbookSocket } from "@/hooks/useOrderbookSocket";
 import { useEffect, useState } from "react";
 import { Toaster } from "react-hot-toast";
 
-const SUPPORTED_MARKETS = ['BTC-USD', 'ETH-USD'];
+const SUPPORTED_MARKETS = [
+  "BTC-USD",
+  "ETH-USD",
+  "SOL-USD",
+  "BNB-USD",
+  "XRP-USD",
+  "ADA-USD",
+  "DOGE-USD",
+  "AVAX-USD",
+  "MATIC-USD",
+  "DOT-USD",
+];
 export default function Home() {
   const [selectedMarket, setSelectedMarket] = useState(SUPPORTED_MARKETS[0]);
 

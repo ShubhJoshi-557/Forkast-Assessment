@@ -144,13 +144,13 @@
 //         const response = await axios.get<Candle[]>(
 //           `${API_URL}/charts/${tradingPair}/candles?interval=${interval}`
 //         );
-        
+
 //         if (requestId === latestRequestRef.current) {
 //           const historicalData = response.data.map(c => ({...c, time: c.time as UTCTimestamp}));
 
 //           // --- FINAL FIX: Process the queue atomically with the historical data ---
 //           const queue = messageQueueRef.current;
-          
+
 //           setCandles(currentCandles => {
 //             // Start with the historical data as the base
 //             let updatedCandles = historicalData;
@@ -168,7 +168,7 @@
 //             }
 //             return updatedCandles;
 //           });
-          
+
 //           setIsLoading(false);
 //         }
 //       } catch (error) {
@@ -199,7 +199,7 @@
 //     const handleCandleUpdate = (updatedCandle: Candle) => {
 //       // --- 3. Ignore any real-time updates while we are loading the history ---
 //       const formattedCandle = {...updatedCandle, time: updatedCandle.time as UTCTimestamp };
-      
+
 //       // --- 3. If loading, queue the message. Otherwise, update state directly. ---
 //       if (isLoading) {
 //         messageQueueRef.current.push(formattedCandle);
@@ -234,12 +234,11 @@
 //   return { candles };
 // }
 
-
 // apps/web/src/hooks/useChartSocket.ts
-import { useState, useEffect, useRef } from 'react';
-import io, { Socket } from 'socket.io-client';
-import axios from 'axios';
-import { UTCTimestamp } from 'lightweight-charts';
+import axios from "axios";
+import { UTCTimestamp } from "lightweight-charts";
+import { useEffect, useRef, useState } from "react";
+import io, { Socket } from "socket.io-client";
 
 export interface Candle {
   time: UTCTimestamp;
@@ -250,8 +249,8 @@ export interface Candle {
   volume?: number;
 }
 
-const SOCKET_URL = 'http://localhost:3001';
-const API_URL = 'http://localhost:3001';
+const SOCKET_URL = "http://localhost:3001";
+const API_URL = "http://localhost:3001";
 
 export function useChartSocket(tradingPair: string, interval: string) {
   const [candles, setCandles] = useState<Candle[]>([]);
@@ -269,31 +268,42 @@ export function useChartSocket(tradingPair: string, interval: string) {
         const response = await axios.get<Candle[]>(
           `${API_URL}/charts/${tradingPair}/candles?interval=${interval}`
         );
-        
+
         if (requestId === latestRequestRef.current) {
-          const formattedData = response.data.map(c => ({...c, time: c.time as UTCTimestamp}));
+          const formattedData = response.data.map((c) => ({
+            ...c,
+            time: c.time as UTCTimestamp,
+          }));
           setCandles(formattedData);
         }
       } catch (error) {
-        console.error(`Failed to fetch initial candle data for ${tradingPair}:`, error);
+        console.error(
+          `Failed to fetch initial candle data for ${tradingPair}:`,
+          error
+        );
       }
     };
     fetchInitialData();
-    
+
     const socket = io(SOCKET_URL, {
-      transports: ['websocket'],
+      transports: ["websocket"],
       autoConnect: false,
     });
     socketRef.current = socket;
-    
+
     const handleConnect = () => {
-      console.log(`[ChartSocket] Connected: ${socket.id}. Subscribing to ${tradingPair}`);
-      socket.emit('subscribe', { room: tradingPair });
+      console.log(
+        `[ChartSocket] Connected: ${socket.id}. Subscribing to ${tradingPair}`
+      );
+      socket.emit("subscribe", { room: tradingPair });
     };
 
     const handleCandleUpdate = (updatedCandle: Candle) => {
-      const formattedCandle = {...updatedCandle, time: updatedCandle.time as UTCTimestamp };
-      
+      const formattedCandle = {
+        ...updatedCandle,
+        time: updatedCandle.time as UTCTimestamp,
+      };
+
       setCandles((prevCandles) => {
         if (prevCandles.length === 0) {
           return [formattedCandle];
@@ -313,11 +323,12 @@ export function useChartSocket(tradingPair: string, interval: string) {
       });
     };
 
-    socket.on('connect', handleConnect);
-    socket.on('candle_update', handleCandleUpdate);
+    socket.on("connect", handleConnect);
+    socket.on("candle_update", handleCandleUpdate);
     socket.connect();
-    
+
     return () => {
+      const currentRequestId = latestRequestRef.current;
       latestRequestRef.current++;
       if (socketRef.current) {
         socketRef.current.disconnect();

@@ -29,7 +29,7 @@
 //     return candles;
 //   }
 // }
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Prisma, Trade } from '@prisma/client';
 import { Consumer, Kafka } from 'kafkajs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,7 +45,7 @@ export type Candle = {
 };
 
 @Injectable()
-export class ChartsService {
+export class ChartsService implements OnModuleInit {
   private readonly kafka: Kafka;
   private readonly consumer: Consumer;
   // In-memory store for the current, real-time candles for each trading pair.

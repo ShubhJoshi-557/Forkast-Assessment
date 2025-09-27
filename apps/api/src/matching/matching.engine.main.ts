@@ -1,30 +1,20 @@
 import { NestFactory } from '@nestjs/core';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { MatchingEngineModule } from './matching.engine.module';
 
 async function bootstrap() {
-  // 1. Get the environment variable and validate it
-  const kafkaBrokerUrl = process.env.KAFKA_BROKER_URL;
-  if (!kafkaBrokerUrl) {
-    throw new Error('KAFKA_BROKER_URL environment variable is not set!');
-  }
+  // Create a regular NestJS application instead of microservice
+  // The Kafka consumer is handled by MatchingEngineService directly
+  const app = await NestFactory.createApplicationContext(MatchingEngineModule);
 
-  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
-    MatchingEngineModule,
-    {
-      transport: Transport.KAFKA,
-      options: {
-        client: {
-          // 2. Use the validated variable. TypeScript is now happy.
-          brokers: [kafkaBrokerUrl],
-        },
-        consumer: {
-          groupId: 'matching-engine',
-        },
-      },
-    },
-  );
-  await app.listen();
-  console.log('🚀 Matching Engine microservice is running');
+  console.log('🚀 Matching Engine service is running');
+
+  // Keep the application running
+  process.on('SIGINT', () => {
+    void app.close().then(() => process.exit(0));
+  });
+
+  process.on('SIGTERM', () => {
+    void app.close().then(() => process.exit(0));
+  });
 }
 void bootstrap();

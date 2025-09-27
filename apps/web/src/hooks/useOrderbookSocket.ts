@@ -328,10 +328,22 @@ export function useOrderbookSocket(tradingPair: string) {
 
           userId: 1,
         });
-      } catch (error: any) {
-        throw new Error(
-          error.response?.data?.message || "An unknown error occurred"
-        );
+      } catch (error: unknown) {
+        let errorMessage = "An unknown error occurred";
+        if (error instanceof Error) {
+          if (
+            "response" in error &&
+            error.response &&
+            typeof error.response === "object" &&
+            "data" in error.response
+          ) {
+            const responseData = error.response.data as { message?: string };
+            errorMessage = responseData.message || "An unknown error occurred";
+          } else {
+            errorMessage = error.message;
+          }
+        }
+        throw new Error(errorMessage);
       }
     },
 
@@ -348,7 +360,10 @@ export function useOrderbookSocket(tradingPair: string) {
     const handleOrderUpdate = () => {
       console.log(`✅ Received order_update, queueing debounced fetch...`);
 
-      debouncedFetchOrderBook();
+      // Add a small delay to ensure database updates are committed
+      setTimeout(() => {
+        debouncedFetchOrderBook();
+      }, 100);
     };
 
     // ... The rest of the useEffect (socket connection, other handlers, cleanup) remains the same as the last version ...
@@ -394,16 +409,25 @@ export function useOrderbookSocket(tradingPair: string) {
     };
 
     const handleNewTrade = (newTrade: Trade) => {
+      console.log(`📈 Received new trade:`, newTrade);
       if (newTrade.tradingPair === tradingPair) {
         setTrades((prev) => [newTrade, ...prev].slice(0, 50));
       }
     };
 
+    const handleSocketError = (error: any) => {
+      console.error(`❌ WebSocket error:`, error);
+    };
+
+    const handleSocketDisconnect = () => {
+      console.log(`🔌 WebSocket disconnected`);
+    };
+
     socket.on("connect", handleConnect);
-
     socket.on("new_trade", handleNewTrade);
-
-    socket.on("order_update", handleOrderUpdate); // This handler now calls the debounced function
+    socket.on("order_update", handleOrderUpdate);
+    socket.on("error", handleSocketError);
+    socket.on("disconnect", handleSocketDisconnect);
 
     socket.connect();
 
