@@ -1,3 +1,5 @@
+import { ArrowDown, ArrowUp } from "lucide-react";
+
 interface Trade {
   id: string;
   price: string;
@@ -7,29 +9,29 @@ interface Trade {
 
 interface TradeHistoryProps {
   trades: Trade[];
-  tradingPair: string; // Add this new prop
+  tradingPair: string;
 }
 
-function getPriceDirectionColor(trades: Trade[], currentIndex: number): string {
-  if (currentIndex === 0 || !trades[currentIndex] || !trades[currentIndex - 1]) {
-    return "text-gray-400";
+function getPriceDirection(
+  trades: Trade[],
+  currentIndex: number
+): "up" | "down" | "neutral" {
+  if (
+    currentIndex === 0 ||
+    !trades[currentIndex] ||
+    !trades[currentIndex - 1]
+  ) {
+    return "neutral";
   }
 
   const currentPrice = Number(trades[currentIndex].price);
   const previousPrice = Number(trades[currentIndex - 1].price);
 
-  // Handle invalid prices
-  if (isNaN(currentPrice) || isNaN(previousPrice)) {
-    return "text-gray-400";
-  }
+  if (isNaN(currentPrice) || isNaN(previousPrice)) return "neutral";
 
-  if (currentPrice > previousPrice) {
-    return "text-green-400";
-  } else if (currentPrice < previousPrice) {
-    return "text-red-400";
-  } else {
-    return "text-gray-400";
-  }
+  if (currentPrice > previousPrice) return "up";
+  if (currentPrice < previousPrice) return "down";
+  return "neutral";
 }
 
 export function TradeHistory({ trades, tradingPair }: TradeHistoryProps) {
@@ -40,31 +42,48 @@ export function TradeHistory({ trades, tradingPair }: TradeHistoryProps) {
     <div className="bg-gray-800 rounded-lg p-4 flex flex-col h-full">
       <h2 className="text-xl font-semibold mb-2 text-center">Trade History</h2>
 
-      <div className="flex justify-between text-xs text-gray-400 px-2 mb-2">
-        {/* Make labels dynamic */}
-
-        <span>Price ({quoteAsset})</span>
-
-        <span>Quantity ({baseAsset})</span>
-
-        <span>Time</span>
+      {/* Column headers */}
+      <div className="grid grid-cols-3 text-xs text-gray-400 px-2 mb-2">
+        <span className="text-left">Price ({quoteAsset})</span>
+        <span className="text-right">Quantity ({baseAsset})</span>
+        <span className="text-right">Time</span>
       </div>
 
-      <ul className="flex-grow overflow-y-auto">
+      <ul className="flex-grow overflow-y-auto font-mono">
         {trades.map((trade, index) => {
-          const priceColor = getPriceDirectionColor(trades, index);
+          const direction = getPriceDirection(trades, index);
+
+          let color = "text-gray-400";
+          if (direction === "up") color = "text-green-400";
+          if (direction === "down") color = "text-red-400";
+
           return (
             <li
               key={trade.id}
-              className="flex justify-between p-1 px-2 text-sm hover:bg-gray-700"
+              className="grid grid-cols-3 items-center p-1 px-2 text-sm hover:bg-gray-700"
             >
-              <span className={priceColor}>
-                {Number(trade.price).toFixed(2)}
+              {/* Price with arrow */}
+              <span className={`flex items-center gap-1 ${color}`}>
+                {/* {Number(trade.price).toFixed(2)} */}
+                {Number(trade.price).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+                {direction === "up" && <ArrowUp size={12} />}
+                {direction === "down" && <ArrowDown size={12} />}
               </span>
 
-              <span>{Number(trade.quantity).toFixed(4)}</span>
+              {/* Quantity aligned right */}
+              <span className="text-right">
+                {/* {Number(trade.quantity).toFixed(4)} */}
+                {Number(trade.quantity).toLocaleString("en-US", {
+                  minimumFractionDigits: 4,
+                  maximumFractionDigits: 4,
+                })}
+              </span>
 
-              <span className="text-gray-400">
+              {/* Time aligned right */}
+              <span className="text-right text-gray-400">
                 {new Date(trade.createdAt).toLocaleTimeString()}
               </span>
             </li>
