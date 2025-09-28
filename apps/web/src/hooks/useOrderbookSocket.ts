@@ -21,6 +21,7 @@ interface Trade {
   quantity: string;
   createdAt: string;
   tradingPair: string;
+  aggressorType: "BUY" | "SELL";
 }
 
 /**

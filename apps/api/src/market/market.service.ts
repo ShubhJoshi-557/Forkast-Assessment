@@ -32,6 +32,7 @@ export class MarketService {
       quantity: any;
       price: any;
       createdAt: Date;
+      aggressorType: 'BUY' | 'SELL';
     }>
   > {
     try {
@@ -39,14 +40,56 @@ export class MarketService {
 
       const trades = await this.prisma.trade.findMany({
         where: { tradingPair },
+        include: {
+          buyOrder: {
+            select: {
+              type: true,
+              createdAt: true,
+            },
+          },
+          sellOrder: {
+            select: {
+              type: true,
+              createdAt: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         take: 50,
       });
 
+      // Transform trades to include aggressor type
+      // The aggressor is the taker - the incoming order that crossed the spread
+      // In the matching engine, the newOrder (taker) is always the aggressor
+      const transformedTrades = trades.map((trade) => {
+        // The aggressor is determined by which order was the incoming order (taker)
+        // We need to determine which order was the taker by comparing creation times
+        // The taker (incoming order) will have a later creation time than the maker (existing order)
+        const buyOrderTime = new Date(trade.buyOrder.createdAt).getTime();
+        const sellOrderTime = new Date(trade.sellOrder.createdAt).getTime();
+
+        // The order with the later timestamp is the taker (aggressor)
+        const aggressorType =
+          buyOrderTime > sellOrderTime
+            ? trade.buyOrder.type
+            : trade.sellOrder.type;
+
+        return {
+          id: trade.id,
+          tradingPair: trade.tradingPair,
+          buyOrderId: trade.buyOrderId,
+          sellOrderId: trade.sellOrderId,
+          quantity: trade.quantity,
+          price: trade.price,
+          createdAt: trade.createdAt,
+          aggressorType,
+        };
+      });
+
       this.logger.debug(
-        `Retrieved ${trades.length} recent trades for ${tradingPair}`,
+        `Retrieved ${transformedTrades.length} recent trades for ${tradingPair}`,
       );
-      return trades;
+      return transformedTrades;
     } catch (error) {
       this.logger.error(
         `Failed to fetch recent trades for ${tradingPair}:`,

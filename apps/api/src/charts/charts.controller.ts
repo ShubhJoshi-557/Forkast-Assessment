@@ -47,7 +47,11 @@ export class ChartsController {
     const normalizedPair = tradingPair.toUpperCase();
 
     // Validate interval parameter to prevent SQL injection
-    if (!ALLOWED_INTERVALS.includes(interval as any)) {
+    if (
+      !ALLOWED_INTERVALS.includes(
+        interval as (typeof ALLOWED_INTERVALS)[number],
+      )
+    ) {
       throw new BadRequestException(
         `Invalid interval parameter. Allowed values: ${ALLOWED_INTERVALS.join(', ')}`,
       );

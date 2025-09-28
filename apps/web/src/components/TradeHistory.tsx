@@ -5,6 +5,7 @@ interface Trade {
   price: string;
   quantity: string;
   createdAt: string;
+  aggressorType: "BUY" | "SELL";
 }
 
 interface TradeHistoryProps {
@@ -12,26 +13,11 @@ interface TradeHistoryProps {
   tradingPair: string;
 }
 
-function getPriceDirection(
-  trades: Trade[],
-  currentIndex: number
-): "up" | "down" | "neutral" {
-  if (
-    currentIndex === 0 ||
-    !trades[currentIndex] ||
-    !trades[currentIndex - 1]
-  ) {
-    return "neutral";
-  }
-
-  const currentPrice = Number(trades[currentIndex].price);
-  const previousPrice = Number(trades[currentIndex - 1].price);
-
-  if (isNaN(currentPrice) || isNaN(previousPrice)) return "neutral";
-
-  if (currentPrice > previousPrice) return "up";
-  if (currentPrice < previousPrice) return "down";
-  return "neutral";
+function getTradeColor(aggressorType: "BUY" | "SELL"): string {
+  // In real exchanges:
+  // - Green (or up arrow) = Buy order initiated the trade (aggressive buy)
+  // - Red (or down arrow) = Sell order initiated the trade (aggressive sell)
+  return aggressorType === "BUY" ? "text-green-400" : "text-red-400";
 }
 
 export function TradeHistory({ trades, tradingPair }: TradeHistoryProps) {
@@ -49,12 +35,8 @@ export function TradeHistory({ trades, tradingPair }: TradeHistoryProps) {
       </div>
 
       <ul className="flex-grow overflow-y-auto font-mono">
-        {trades.map((trade, index) => {
-          const direction = getPriceDirection(trades, index);
-
-          let color = "text-gray-400";
-          if (direction === "up") color = "text-green-400";
-          if (direction === "down") color = "text-red-400";
+        {trades.map((trade) => {
+          const color = getTradeColor(trade.aggressorType);
 
           return (
             <li
@@ -63,18 +45,16 @@ export function TradeHistory({ trades, tradingPair }: TradeHistoryProps) {
             >
               {/* Price with arrow */}
               <span className={`flex items-center gap-1 ${color}`}>
-                {/* {Number(trade.price).toFixed(2)} */}
                 {Number(trade.price).toLocaleString("en-US", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
-                {direction === "up" && <ArrowUp size={12} />}
-                {direction === "down" && <ArrowDown size={12} />}
+                {trade.aggressorType === "BUY" && <ArrowUp size={12} />}
+                {trade.aggressorType === "SELL" && <ArrowDown size={12} />}
               </span>
 
               {/* Quantity aligned right */}
               <span className="text-right">
-                {/* {Number(trade.quantity).toFixed(4)} */}
                 {Number(trade.quantity).toLocaleString("en-US", {
                   minimumFractionDigits: 4,
                   maximumFractionDigits: 4,
