@@ -103,16 +103,13 @@ A high-performance, enterprise-grade cryptocurrency trading platform built with 
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
-cd forkast-trading-platform
+git clone https://github.com/ShubhJoshi-557/Forkast-Assessment.git
+cd Forkast-Assessment
 ```
 
 ### 2. Install Dependencies
 
 ```bash
-# Install root dependencies
-pnpm install
-
 # Install API dependencies
 cd apps/api
 pnpm install
@@ -194,15 +191,9 @@ pnpm db:reset           # Reset database
 pnpm db:seed            # Seed database
 pnpm db:studio          # Open Prisma Studio
 
-# Testing
-pnpm test               # Run unit tests
-pnpm test:e2e           # Run end-to-end tests
-pnpm test:cov           # Run tests with coverage
-
 # Production
 pnpm build               # Build for production
 pnpm start:prod          # Start production server
-pnpm pm2                 # Start with PM2 cluster
 ```
 
 #### Web (`apps/web/`)
@@ -283,176 +274,17 @@ socket.on('order_update', (order) => {
 });
 ```
 
-## 🐳 Docker Deployment
-
-### Development Environment
-
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
-### Production Deployment
-
-```bash
-# Build API image
-cd apps/api
-docker build -t forkast-api .
-
-# Build Web image
-cd ../web
-docker build -t forkast-web .
-
-# Run with production compose
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-## 🔍 Monitoring & Debugging
-
-### Logs
-
-```bash
-# API logs
-cd apps/api
-pnpm start:dev  # Console logs
-
-# Docker logs
-docker-compose logs -f api
-docker-compose logs -f postgres
-docker-compose logs -f redis
-docker-compose logs -f kafka
-```
-
-### Database
-
-```bash
-# Connect to database
-docker exec -it <postgres-container> psql -U user -d orderbook
-
-# View tables
-\dt
-
-# Check order data
-SELECT * FROM "Order" LIMIT 10;
-```
-
-### Kafka
-
-```bash
-# List topics
-docker exec -it <kafka-container> kafka-topics --bootstrap-server localhost:9092 --list
-
-# Consume messages
-docker exec -it <kafka-container> kafka-console-consumer --bootstrap-server localhost:9092 --topic orders.new --from-beginning
-```
-
 ## 🧪 Testing
-
-### Unit Tests
-
-```bash
-cd apps/api
-pnpm test
-```
-
-### End-to-End Tests
-
-```bash
-cd apps/api
-pnpm test:e2e
-```
 
 ### Load Testing
 
 ```bash
 # Run load tests
 cd load-testing
-node test.js
+k6 run test.js
 ```
 
-## 📈 Performance
 
-### Optimizations
-
-- **Database Indexes**: Optimized for matching engine queries
-- **Redis Caching**: Order book and market data caching
-- **Batch Processing**: Kafka message batching
-- **Connection Pooling**: Database connection optimization
-- **PM2 Clustering**: Multi-process API scaling
-
-### Benchmarks
-
-- **Order Processing**: 1000+ orders/second
-- **WebSocket Latency**: <10ms for real-time updates
-- **Database Queries**: Sub-millisecond for indexed lookups
-- **Memory Usage**: <500MB per API instance
-
-## 🔒 Security
-
-- **Input Validation**: Comprehensive data validation
-- **SQL Injection Protection**: Prisma ORM protection
-- **CORS Configuration**: Proper cross-origin setup
-- **Environment Variables**: Secure configuration management
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-
-- Follow TypeScript best practices
-- Write comprehensive tests
-- Update documentation for new features
-- Use conventional commit messages
-- Ensure all tests pass before submitting PR
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-### Common Issues
-
-**Database Connection Issues:**
-```bash
-# Check if PostgreSQL is running
-docker-compose ps postgres
-
-# Reset database
-cd apps/api
-pnpm db:reset
-```
-
-**Kafka Connection Issues:**
-```bash
-# Check Kafka status
-docker-compose logs kafka
-
-# Restart Kafka
-docker-compose restart kafka
-```
-
-**WebSocket Connection Issues:**
-- Ensure API server is running on port 3001
-- Check CORS configuration
-- Verify WebSocket URL in frontend
-
-### Getting Help
-
-- Check the [Issues](https://github.com/your-repo/issues) page
-- Review the [Documentation](docs/)
-- Contact the development team
 
 ## 🎯 Roadmap
 
@@ -467,4 +299,4 @@ docker-compose restart kafka
 
 ---
 
-**Built with ❤️ by the Forkast Team**
+**Built with ❤️ by the Shubh Joshi**
