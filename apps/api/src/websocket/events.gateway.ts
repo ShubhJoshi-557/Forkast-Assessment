@@ -78,21 +78,26 @@ export class EventsGateway {
 
   /**
    * Broadcasts a new trade to all clients subscribed to the trading pair.
-   * Includes aggressorType calculation for proper trade history coloring.
+   * The trade should already include aggressorType from the matching engine.
    *
-   * @param trade - Trade data to broadcast
+   * @param trade - Trade data to broadcast (should include aggressorType)
    */
-  broadcastTrade(trade: Trade): void {
+  broadcastTrade(trade: Trade & { aggressorType?: 'BUY' | 'SELL' }): void {
     this.logger.debug(`Broadcasting new trade to room: ${trade.tradingPair}`);
 
-    // Calculate aggressorType for trade history coloring
-    // The aggressor is the order that crossed the spread (placed later)
-    // We need to fetch the order details to compare timestamps
+    // If aggressorType is already included, broadcast directly
+    if (trade.aggressorType) {
+      this.server.to(trade.tradingPair).emit('new_trade', trade);
+      return;
+    }
+
+    // Fallback: calculate aggressorType if not provided (legacy support)
     void this.calculateAndBroadcastTrade(trade);
   }
 
   /**
    * Calculates aggressorType and broadcasts the trade with proper formatting.
+   * This is a fallback method for legacy compatibility.
    *
    * @param trade - Raw trade data from database
    */

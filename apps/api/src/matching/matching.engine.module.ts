@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { RedisModule } from 'src/redis/redis.module';
 import { KafkaModule } from '../kafka/kafka.module';
+import { MarketModule } from '../market/market.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MatchingEngineService } from './matching.engine.service';
-import { RedisModule } from 'src/redis/redis.module';
 
 // 1. Validate the environment variable at the top of the file
 const kafkaBrokerUrl = process.env.KAFKA_BROKER_URL;
@@ -15,6 +16,7 @@ if (!kafkaBrokerUrl) {
   imports: [
     PrismaModule,
     KafkaModule,
+    MarketModule,
     RedisModule,
     ClientsModule.register([
       {

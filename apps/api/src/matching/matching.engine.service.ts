@@ -3,6 +3,7 @@ import { OrderStatus, OrderType, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Consumer, Kafka } from 'kafkajs';
 import { KafkaProducerService } from '../kafka/kafka.producer.service';
+import { MarketService } from '../market/market.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -61,6 +62,8 @@ interface TradeProcessingResult {
  * - Executes trades in batches for optimal performance
  * - Publishes trade and order update events
  * - Maintains data consistency through database transactions
+ * - Uses in-memory order tracking for ultra-fast aggressor calculation
+ * - Invalidates Redis cache on order updates
  *
  * The matching algorithm ensures:
  * - Price priority: Best prices are matched first
@@ -79,9 +82,21 @@ export class MatchingEngineService implements OnModuleInit {
   private static readonly HEARTBEAT_INTERVAL = 5; // Send heartbeat every 5 messages
   private static readonly MAX_CONCURRENT_PARTITIONS = 8; // Process up to 8 partitions concurrently
 
+  // In-memory order tracking for aggressor calculation
+  private readonly orderCache = new Map<
+    string,
+    {
+      id: string;
+      type: OrderType;
+      createdAt: Date;
+      tradingPair: string;
+    }
+  >();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly kafkaProducer: KafkaProducerService,
+    private readonly marketService: MarketService,
   ) {
     // Validate required environment variables
     if (!process.env.KAFKA_BROKER_URL) {
@@ -212,9 +227,11 @@ export class MatchingEngineService implements OnModuleInit {
    *
    * This method implements the core order processing logic:
    * 1. Creates the order in the database (idempotent)
-   * 2. Finds matching orders using optimized queries
-   * 3. Executes trades in batches for performance
-   * 4. Publishes events for real-time updates
+   * 2. Caches order data in memory for aggressor calculation
+   * 3. Finds matching orders using optimized queries
+   * 4. Executes trades in batches for performance
+   * 5. Publishes events for real-time updates
+   * 6. Invalidates Redis cache for order book updates
    *
    * @param order - Order payload from Kafka
    */
@@ -237,22 +254,26 @@ export class MatchingEngineService implements OnModuleInit {
 
       this.logger.debug(`Created order ${newOrder.id} in database`);
 
-      // Step 2: Find matching orders using optimized database query
+      // Step 2: Cache order data in memory for aggressor calculation
+      this.cacheOrderData(newOrder);
+
+      // Step 3: Find matching orders using optimized database query
       const matchingOrders = await this.findMatchingOrders(newOrder);
       this.logger.debug(
         `Found ${matchingOrders.length} matching orders for ${newOrder.id}`,
       );
 
       if (matchingOrders.length === 0) {
-        // No matches found, publish order update and exit
+        // No matches found, publish order update and invalidate cache
         this.logger.debug(
           `No matches found for order ${newOrder.id}, publishing order update`,
         );
         await this.publishOrderUpdate(newOrder);
+        await this.marketService.invalidateOrderBookCache(order.tradingPair);
         return;
       }
 
-      // Step 3: Process trades in batches to optimize database performance
+      // Step 4: Process trades in batches to optimize database performance
       this.logger.debug(
         `Processing ${matchingOrders.length} matching orders in batches`,
       );
@@ -265,9 +286,15 @@ export class MatchingEngineService implements OnModuleInit {
         `Executed ${result.trades.length} trades for order ${newOrder.id} in ${Date.now() - startTime}ms`,
       );
 
-      // Step 4: Publish all events asynchronously for real-time updates
-      await this.publishEventsAsync(result);
-      this.logger.debug(`Published events for order ${newOrder.id}`);
+      // Step 5: Publish all events asynchronously for real-time updates
+      await this.publishEventsWithAggressor(result);
+
+      // Step 6: Invalidate Redis cache for order book updates
+      await this.marketService.invalidateOrderBookCache(order.tradingPair);
+
+      this.logger.debug(
+        `Published events and invalidated cache for order ${newOrder.id}`,
+      );
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -570,18 +597,40 @@ export class MatchingEngineService implements OnModuleInit {
   }
 
   /**
+   * Caches order data in memory for ultra-fast aggressor calculation.
+   *
+   * @param order - Order data to cache
+   */
+  private cacheOrderData(order: {
+    id: string;
+    type: OrderType;
+    createdAt: Date;
+    tradingPair: string;
+  }): void {
+    this.orderCache.set(order.id, {
+      id: order.id,
+      type: order.type,
+      createdAt: order.createdAt,
+      tradingPair: order.tradingPair,
+    });
+
+    this.logger.debug(`Cached order data for ${order.id}`);
+  }
+
+  /**
    * Publishes all trade and order update events to Kafka asynchronously.
+   * Uses in-memory order data for aggressor calculation to avoid DB queries.
    *
    * This method publishes:
    * - Initial order update for the new order
-   * - All executed trades
+   * - All executed trades with aggressor type
    * - All order status updates
    *
    * All events are published in parallel for optimal performance.
    *
    * @param result - Trade processing result containing all events to publish
    */
-  private async publishEventsAsync(
+  private async publishEventsWithAggressor(
     result: TradeProcessingResult,
   ): Promise<void> {
     // Publish all events asynchronously to avoid blocking
@@ -602,14 +651,18 @@ export class MatchingEngineService implements OnModuleInit {
         .then(() => {}),
     );
 
-    // Trade executions
+    // Trade executions with aggressor calculation
     for (const trade of result.trades) {
+      const tradeWithAggressor = this.calculateAggressorForTrade(trade);
       publishPromises.push(
         this.kafkaProducer
           .produce({
             topic: 'trades.executed',
             messages: [
-              { key: trade.tradingPair, value: JSON.stringify(trade) },
+              {
+                key: trade.tradingPair,
+                value: JSON.stringify(tradeWithAggressor),
+              },
             ],
           })
           .then(() => {}),
@@ -635,6 +688,72 @@ export class MatchingEngineService implements OnModuleInit {
 
     // Execute all publishes in parallel
     await Promise.all(publishPromises);
+  }
+
+  /**
+   * Calculates aggressor type for a trade using in-memory order data.
+   * Avoids database queries for ultra-fast processing.
+   *
+   * @param trade - Trade data
+   * @returns Trade with aggressor type
+   */
+  private calculateAggressorForTrade(trade: {
+    id: string;
+    tradingPair: string;
+    buyOrderId: string;
+    sellOrderId: string;
+    quantity: Prisma.Decimal;
+    price: Prisma.Decimal;
+    createdAt: Date;
+  }): {
+    id: string;
+    tradingPair: string;
+    buyOrderId: string;
+    sellOrderId: string;
+    quantity: Prisma.Decimal;
+    price: Prisma.Decimal;
+    createdAt: Date;
+    aggressorType: 'BUY' | 'SELL';
+  } {
+    const buyOrder = this.orderCache.get(trade.buyOrderId);
+    const sellOrder = this.orderCache.get(trade.sellOrderId);
+
+    if (!buyOrder || !sellOrder) {
+      this.logger.warn(
+        `Could not find cached order data for trade ${trade.id}, using default aggressor`,
+      );
+      return {
+        ...trade,
+        aggressorType: 'BUY' as const,
+      };
+    }
+
+    // Compare order timestamps to determine aggressor
+    // The order placed later is the aggressor (crosses the spread)
+    const aggressorType =
+      buyOrder.createdAt > sellOrder.createdAt ? buyOrder.type : sellOrder.type;
+
+    this.logger.debug(
+      `Calculated aggressor for trade ${trade.id}: ${aggressorType}`,
+    );
+
+    return {
+      ...trade,
+      aggressorType,
+    };
+  }
+
+  /**
+   * Publishes all trade and order update events to Kafka asynchronously.
+   * Legacy method - kept for backward compatibility.
+   *
+   * @param result - Trade processing result containing all events to publish
+   */
+  private async publishEventsAsync(
+    result: TradeProcessingResult,
+  ): Promise<void> {
+    // Delegate to the new method with aggressor calculation
+    await this.publishEventsWithAggressor(result);
   }
 
   /**
