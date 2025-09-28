@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+// import { v4 as uuidv4 } from 'uuid';
 import { KafkaProducerService } from '../kafka/kafka.producer.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { generateUUID } from 'src/utils/uuid.util';
 
 /**
  * OrdersService handles order creation and submission to the matching engine.
@@ -32,7 +33,7 @@ export class OrdersService {
   ): Promise<{ message: string; orderId: string }> {
     try {
       // Generate unique order ID for idempotency
-      const orderId = uuidv4();
+      const orderId = await generateUUID();
 
       this.logger.log(
         `Creating order ${orderId} for ${data.tradingPair}: ${data.type} ${data.quantity} @ ${data.price}`,
