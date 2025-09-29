@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Injectable, Logger } from '@nestjs/common';
 import { OrderStatus, OrderType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { EventsGateway } from '../websocket/events.gateway';
 
 /**
  * MarketService handles market data retrieval and order book management.
@@ -26,6 +28,7 @@ export class MarketService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
+    public readonly eventsGateway: EventsGateway,
   ) {}
 
   /**
@@ -218,7 +221,7 @@ export class MarketService {
    * @param tradingPair - Trading pair identifier
    * @param orderBook - Order book data to cache
    */
-  private async cacheOrderBook(
+  async cacheOrderBook(
     tradingPair: string,
     orderBook: {
       bids: Array<{
@@ -256,7 +259,7 @@ export class MarketService {
    * @param tradingPair - Trading pair identifier
    * @returns Order book data from database
    */
-  private async buildOrderBookFromDatabase(tradingPair: string): Promise<{
+  async buildOrderBookFromDatabase(tradingPair: string): Promise<{
     bids: Array<{
       price: string;
       quantity: string;
@@ -320,6 +323,121 @@ export class MarketService {
     } catch (error) {
       this.logger.warn(
         `Failed to invalidate order book cache for ${tradingPair}:`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Updates the order book cache immediately when a new order is created.
+   * This provides real-time order book updates before order processing.
+   *
+   * @param tradingPair - Trading pair identifier
+   * @param order - New order data
+   */
+  async updateOrderBookCacheImmediately(
+    tradingPair: string,
+    order: {
+      id: string;
+      type: 'BUY' | 'SELL';
+      price: string;
+      quantity: string;
+      status: OrderStatus;
+    },
+  ): Promise<void> {
+    try {
+      // Get current cached order book
+      let orderBook = await this.getCachedOrderBook(tradingPair);
+
+      // If no cache exists, build from database
+      if (!orderBook) {
+        orderBook = await this.buildOrderBookFromDatabase(tradingPair);
+      }
+
+      // Add the new order to the appropriate side
+      const newOrderEntry = {
+        price: order.price,
+        quantity: order.quantity,
+        filledQuantity: '0',
+        status: order.status,
+      };
+
+      if (order.type === 'BUY') {
+        // Add to bids and sort by price descending
+        orderBook.bids.push(newOrderEntry);
+        orderBook.bids.sort(
+          (a, b) => parseFloat(b.price) - parseFloat(a.price),
+        );
+      } else {
+        // Add to asks and sort by price ascending
+        orderBook.asks.push(newOrderEntry);
+        orderBook.asks.sort(
+          (a, b) => parseFloat(a.price) - parseFloat(b.price),
+        );
+      }
+
+      // Update the cache
+      await this.cacheOrderBook(tradingPair, orderBook);
+
+      // Broadcast order book update via WebSocket
+      this.eventsGateway.broadcastOrderBookUpdate(tradingPair, orderBook);
+
+      this.logger.debug(
+        `Updated order book cache immediately for ${tradingPair} with new ${order.type} order`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to update order book cache immediately for ${tradingPair}:`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Updates the order book cache when an order is filled or updated.
+   * This provides real-time order book updates during order processing.
+   *
+   * @param tradingPair - Trading pair identifier
+   * @param orderId - Order ID to update
+   * @param newStatus - New order status
+   * @param newFilledQuantity - New filled quantity
+   */
+  async updateOrderBookCacheOnFill(
+    tradingPair: string,
+    orderId: string,
+    _newStatus: OrderStatus,
+    _newFilledQuantity: string,
+  ): Promise<void> {
+    try {
+      // Get current cached order book
+      let orderBook = await this.getCachedOrderBook(tradingPair);
+
+      // If no cache exists, build from database
+      if (!orderBook) {
+        orderBook = await this.buildOrderBookFromDatabase(tradingPair);
+      }
+
+      // Since we can't update individual orders without IDs, invalidate cache
+      // This forces a fresh fetch from database with correct order states
+      await this.invalidateOrderBookCache(tradingPair);
+
+      // Get the updated order book and broadcast it
+      const updatedOrderBook =
+        await this.buildOrderBookFromDatabase(tradingPair);
+      await this.cacheOrderBook(tradingPair, updatedOrderBook);
+
+      // Broadcast the updated order book via WebSocket
+      this.eventsGateway.broadcastOrderBookUpdate(
+        tradingPair,
+        updatedOrderBook,
+      );
+
+      this.logger.debug(
+        `Updated order book cache on fill for ${tradingPair} - order ${orderId}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to update order book cache on fill for ${tradingPair}:`,
         error,
       );
     }

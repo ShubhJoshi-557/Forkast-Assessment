@@ -108,4 +108,31 @@ export class EventsGateway {
     );
     this.server.to(order.tradingPair).emit('order_update', order);
   }
+
+  /**
+   * Broadcasts order book updates to all clients subscribed to the trading pair.
+   *
+   * @param tradingPair - Trading pair identifier
+   * @param orderBook - Updated order book data
+   */
+  broadcastOrderBookUpdate(
+    tradingPair: string,
+    orderBook: {
+      bids: Array<{
+        price: string;
+        quantity: string;
+        filledQuantity: string;
+        status: string;
+      }>;
+      asks: Array<{
+        price: string;
+        quantity: string;
+        filledQuantity: string;
+        status: string;
+      }>;
+    },
+  ): void {
+    this.logger.debug(`Broadcasting order book update to room: ${tradingPair}`);
+    this.server.to(tradingPair).emit('orderbook_update', orderBook);
+  }
 }

@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 // import { v4 as uuidv4 } from 'uuid';
-import { KafkaProducerService } from '../kafka/kafka.producer.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { OrderStatus } from '@prisma/client';
 import { generateUUID } from 'src/utils/uuid.util';
+import { KafkaProducerService } from '../kafka/kafka.producer.service';
+import { MarketService } from '../market/market.service';
+import { CreateOrderDto } from './dto/create-order.dto';
 
 /**
  * OrdersService handles order creation and submission to the matching engine.
@@ -18,7 +20,10 @@ import { generateUUID } from 'src/utils/uuid.util';
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
 
-  constructor(private readonly kafkaProducer: KafkaProducerService) {}
+  constructor(
+    private readonly kafkaProducer: KafkaProducerService,
+    private readonly marketService: MarketService,
+  ) {}
 
   /**
    * Creates a new order and submits it to the matching engine via Kafka.
@@ -45,6 +50,27 @@ export class OrdersService {
         ...data, // Includes tradingPair, type, price, quantity, userId
       };
 
+      // Update order book cache immediately for real-time updates
+      try {
+        await this.marketService.updateOrderBookCacheImmediately(
+          data.tradingPair,
+          {
+            id: orderId,
+            type: data.type,
+            price: data.price.toString(),
+            quantity: data.quantity.toString(),
+            status: OrderStatus.OPEN,
+          },
+        );
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Failed to update order book cache immediately for ${data.tradingPair}: ${errorMessage}`,
+        );
+        // Continue with order processing even if cache update fails
+      }
+
       // Publish to Kafka with trading pair as partition key for ordering
       await this.kafkaProducer.produce({
         topic: 'orders.new',
@@ -57,7 +83,7 @@ export class OrdersService {
       });
 
       this.logger.log(
-        `Order ${orderId} successfully submitted to matching engine`,
+        `Order ${orderId} successfully submitted to matching engine and order book updated`,
       );
 
       return {

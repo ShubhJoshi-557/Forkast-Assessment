@@ -286,11 +286,26 @@ export class MatchingEngineService implements OnModuleInit {
         `Executed ${result.trades.length} trades for order ${newOrder.id} in ${Date.now() - startTime}ms`,
       );
 
-      // Step 5: Publish all events asynchronously for real-time updates
-      await this.publishEventsWithAggressor(result);
+      // Step 5: Update order book cache once after all orders are processed
+      if (result.orderUpdates.length > 0) {
+        // Invalidate cache and broadcast updated order book
+        await this.marketService.invalidateOrderBookCache(order.tradingPair);
+        const updatedOrderBook =
+          await this.marketService.buildOrderBookFromDatabase(
+            order.tradingPair,
+          );
+        await this.marketService.cacheOrderBook(
+          order.tradingPair,
+          updatedOrderBook,
+        );
+        this.marketService.eventsGateway.broadcastOrderBookUpdate(
+          order.tradingPair,
+          updatedOrderBook,
+        );
+      }
 
-      // Step 6: Invalidate Redis cache for order book updates
-      await this.marketService.invalidateOrderBookCache(order.tradingPair);
+      // Step 6: Publish all events asynchronously for real-time updates
+      await this.publishEventsWithAggressor(result);
 
       this.logger.debug(
         `Published events and invalidated cache for order ${newOrder.id}`,

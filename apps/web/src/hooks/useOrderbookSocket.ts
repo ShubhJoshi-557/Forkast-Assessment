@@ -132,11 +132,14 @@ export function useOrderbookSocket(
       }
 
       try {
-        await axios.post(`${API_URL}/orders`, {
+        console.log("Placing order:", orderData);
+        const response = await axios.post(`${API_URL}/orders`, {
           ...orderData,
           tradingPair,
           userId: 1, // TODO: Replace with actual user ID from authentication
         });
+        console.log("Order placed successfully:", response.data);
+        // Order book should update via WebSocket - no HTTP call needed
       } catch (error: unknown) {
         // Extract meaningful error message from API response
         let errorMessage = "An unknown error occurred";
@@ -223,13 +226,24 @@ export function useOrderbookSocket(
     };
 
     /**
-     * Handles order update events with debounced order book refresh.
+     * Handles order update events.
+     * Since we now receive real-time order book updates via WebSocket,
+     * we don't need to fetch the order book via HTTP anymore.
      */
     const handleOrderUpdate = (): void => {
-      // Add a small delay to ensure database updates are committed
-      setTimeout(() => {
-        debouncedFetchOrderBook();
-      }, 100);
+      // Order book updates are now handled via WebSocket
+      // No need to fetch via HTTP
+      console.log(
+        "Order update received - order book should update via WebSocket"
+      );
+    };
+
+    /**
+     * Handles real-time order book updates via WebSocket.
+     */
+    const handleOrderBookUpdate = (updatedOrderBook: OrderBook): void => {
+      console.log("Received orderbook_update via WebSocket:", updatedOrderBook);
+      setOrderBook(updatedOrderBook);
     };
 
     /**
@@ -250,6 +264,7 @@ export function useOrderbookSocket(
     socket.on("connect", handleConnect);
     socket.on("new_trade", handleNewTrade);
     socket.on("order_update", handleOrderUpdate);
+    socket.on("orderbook_update", handleOrderBookUpdate);
     socket.on("error", handleSocketError);
     socket.on("disconnect", handleSocketDisconnect);
 

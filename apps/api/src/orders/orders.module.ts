@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { KafkaModule } from '../kafka/kafka.module';
+import { MarketModule } from '../market/market.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
@@ -13,6 +14,7 @@ if (!kafkaBrokerUrl) {
 @Module({
   imports: [
     KafkaModule,
+    MarketModule,
     ClientsModule.register([
       {
         name: 'KAFKA_SERVICE',
