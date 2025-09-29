@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # === CONFIG ===
-POSTGRES_CONTAINER="ssjassessment-postgres-1"
-REDIS_CONTAINER="ssjassessment-redis-1"
-KAFKA_CONTAINER="ssjassessment-kafka-1"
+POSTGRES_CONTAINER="forkast-assessment-postgres-1"
+REDIS_CONTAINER="forkast-assessment-redis-1"
+KAFKA_CONTAINER="forkast-assessment-kafka-1"
 KAFKA_GROUPS=("charts-group" "matching-engine" "websocket-group")  # <-- updated to multiple groups
 
 # === Colors ===
