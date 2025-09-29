@@ -161,7 +161,6 @@ A high-performance, enterprise-grade cryptocurrency trading platform built with 
 - **Framework**: Next.js 15 with React 19
 - **Styling**: Tailwind CSS
 - **Charts**: Lightweight Charts
-- **State Management**: React Query (TanStack)
 - **WebSocket**: Socket.IO Client
 - **Notifications**: React Hot Toast
 
@@ -253,6 +252,16 @@ pnpm dev
 - **Web Interface**: http://localhost:3000
 - **API Documentation**: http://localhost:3001 (when available)
 - **Database Studio**: `pnpm db:studio` (from apps/api)
+
+## 🧪 Testing
+
+### Load Testing
+
+```bash
+# Run load tests
+cd load-testing
+k6 run test.js
+```
 
 ## 🔧 Development
 
@@ -353,16 +362,6 @@ socket.on('new_trade', (trade) => {
 socket.on('order_update', (order) => {
   console.log('Order update:', order);
 });
-```
-
-## 🧪 Testing
-
-### Load Testing
-
-```bash
-# Run load tests
-cd load-testing
-k6 run test.js
 ```
 
 
