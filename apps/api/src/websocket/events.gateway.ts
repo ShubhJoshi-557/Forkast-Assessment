@@ -85,67 +85,16 @@ export class EventsGateway {
   broadcastTrade(trade: Trade & { aggressorType?: 'BUY' | 'SELL' }): void {
     this.logger.debug(`Broadcasting new trade to room: ${trade.tradingPair}`);
 
-    // If aggressorType is already included, broadcast directly
-    if (trade.aggressorType) {
-      this.server.to(trade.tradingPair).emit('new_trade', trade);
-      return;
+    // The matching engine should always provide aggressorType
+    if (!trade.aggressorType) {
+      this.logger.warn(
+        `Trade ${trade.id} missing aggressorType from matching engine - this should not happen`,
+      );
+      // Use default aggressor as fallback
+      trade.aggressorType = 'BUY';
     }
 
-    // Fallback: calculate aggressorType if not provided (legacy support)
-    void this.calculateAndBroadcastTrade(trade);
-  }
-
-  /**
-   * Calculates aggressorType and broadcasts the trade with proper formatting.
-   * This is a fallback method for legacy compatibility.
-   *
-   * @param trade - Raw trade data from database
-   */
-  private async calculateAndBroadcastTrade(trade: Trade): Promise<void> {
-    try {
-      // Fetch order details to compare timestamps and determine aggressor
-      const [buyOrder, sellOrder] = await Promise.all([
-        this.prisma.order.findUnique({
-          where: { id: trade.buyOrderId },
-          select: { type: true, createdAt: true },
-        }),
-        this.prisma.order.findUnique({
-          where: { id: trade.sellOrderId },
-          select: { type: true, createdAt: true },
-        }),
-      ]);
-
-      if (!buyOrder || !sellOrder) {
-        this.logger.warn(
-          'Could not fetch order details for trade, using default',
-        );
-        const tradeWithAggressor = {
-          ...trade,
-          aggressorType: 'BUY' as const,
-        };
-        this.server.to(trade.tradingPair).emit('new_trade', tradeWithAggressor);
-        return;
-      }
-
-      // Compare order timestamps to determine which order was the aggressor
-      // The order placed later is the aggressor (the one that crossed the spread)
-      const buyOrderTime = new Date(buyOrder.createdAt).getTime();
-      const sellOrderTime = new Date(sellOrder.createdAt).getTime();
-
-      const aggressorType =
-        buyOrderTime > sellOrderTime ? buyOrder.type : sellOrder.type;
-
-      const tradeWithAggressor = {
-        ...trade,
-        aggressorType,
-      };
-
-      this.server.to(trade.tradingPair).emit('new_trade', tradeWithAggressor);
-    } catch (error) {
-      this.logger.error('Failed to calculate aggressorType for trade:', error);
-      // Fallback to original trade data
-      this.server.to(trade.tradingPair).emit('new_trade', trade);
-    }
+    this.server.to(trade.tradingPair).emit('new_trade', trade);
   }
 
   /**

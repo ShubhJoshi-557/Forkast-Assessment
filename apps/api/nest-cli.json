@@ -3,6 +3,19 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "deleteOutDir": true
+    "deleteOutDir": true,
+    "watchAssets": false
+  },
+  "watchOptions": {
+    "watchAssets": false,
+    "ignore": [
+      "node_modules/**/*",
+      "dist/**/*",
+      "**/*.log",
+      "**/*.tmp",
+      "**/.prisma/**/*",
+      "**/.cache/**/*",
+      "**/coverage/**/*"
+    ]
   }
 }

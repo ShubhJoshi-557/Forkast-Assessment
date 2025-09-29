@@ -1,0 +1,19 @@
+# Ignore these files/directories from NestJS watch mode
+node_modules/
+dist/
+build/
+coverage/
+*.log
+*.tmp
+*.cache
+.prisma/
+.cache/
+.git/
+.vscode/
+.idea/
+*.pid
+*.seed
+*.pid.lock
+.env
+.env.*
+.DS_Store
